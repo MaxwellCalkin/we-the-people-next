@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import BillCard from "./BillCard";
 import type { BillResult } from "@/types";
+
+function sortByActionDate(bills: BillResult[]): BillResult[] {
+  return [...bills].sort((a, b) => {
+    const da = a.latest_major_action_date || "";
+    const db = b.latest_major_action_date || "";
+    return db.localeCompare(da);
+  });
+}
 
 interface BillsInfiniteListProps {
   initialBills: BillResult[];
@@ -71,7 +79,7 @@ export default function BillsInfiniteList({
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {bills.map((bill) => (
+        {sortByActionDate(bills).map((bill) => (
           <BillCard
             key={bill.bill_id}
             bill={bill}
