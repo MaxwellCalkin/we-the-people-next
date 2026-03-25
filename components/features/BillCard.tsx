@@ -45,9 +45,7 @@ function formatDate(dateStr?: string): string {
 
 export default function BillCard({ bill, userVotedSlugs }: BillCardProps) {
   const hasVoted = userVotedSlugs.includes(bill.bill_slug);
-  const displayDate =
-    formatDate(bill.latest_major_action_date) ||
-    formatDate(bill.introduced_date);
+  const actionDate = formatDate(bill.latest_major_action_date);
 
   return (
     <GlassCard hover>
@@ -55,8 +53,8 @@ export default function BillCard({ bill, userVotedSlugs }: BillCardProps) {
         <p className="text-xs uppercase tracking-widest text-cream/50">
           {billTypeLabel(bill.bill_type)}
         </p>
-        {displayDate && (
-          <p className="text-xs text-cream/40">{displayDate}</p>
+        {actionDate && (
+          <p className="text-xs text-cream/40">Latest action: {actionDate}</p>
         )}
       </div>
       <h3 className="text-cream font-semibold text-sm leading-snug mb-4 line-clamp-3">
