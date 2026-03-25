@@ -87,7 +87,7 @@ export async function searchBills(
   const congress = getCurrentCongress();
   let url: string;
 
-  const base = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
+  const base = `${CONGRESS_API}/bill/${congress}?limit=20&sort=latestAction+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
   if (query) {
     url = `${base}&query=${encodeURIComponent(query)}`;
   } else {
