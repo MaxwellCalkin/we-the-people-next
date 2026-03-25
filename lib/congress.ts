@@ -78,18 +78,23 @@ export async function fetchBillDetails(
 
 /**
  * Search bills from Congress.gov. Pass null/undefined/empty string for latest bills.
+ * `offset` is the 0-based index to start from (for pagination).
  */
 export async function searchBills(
-  query?: string | null
+  query?: string | null,
+  offset = 0
 ): Promise<BillResult[]> {
   const congress = getCurrentCongress();
-  let url: string;
+  const params = new URLSearchParams({
+    limit: "20",
+    sort: "updateDate desc",
+    api_key: process.env.CONGRESS_KEY!,
+    format: "json",
+    offset: String(offset),
+  });
+  if (query) params.set("query", query);
 
-  if (query) {
-    url = `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(query)}&limit=20&sort=updateDate+desc&api_key=${process.env.CONGRESS_KEY}&format=json`;
-  } else {
-    url = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&api_key=${process.env.CONGRESS_KEY}&format=json`;
-  }
+  const url = `${CONGRESS_API}/bill/${congress}?${params}`;
 
   const resp = await fetch(url);
   const data = await resp.json();
@@ -101,6 +106,8 @@ export async function searchBills(
       type?: string;
       number?: string;
       congress?: number;
+      introducedDate?: string;
+      updateDate?: string;
       latestAction?: { text?: string; actionDate?: string };
     }): BillResult => {
       const type = (b.type || "hr").toLowerCase();
@@ -112,6 +119,7 @@ export async function searchBills(
         bill_slug: `${type}${number}`,
         bill_type: type,
         congress: (b.congress || congress).toString(),
+        introduced_date: b.introducedDate || "",
         latest_major_action: b.latestAction ? b.latestAction.text || "" : "",
         latest_major_action_date: b.latestAction
           ? b.latestAction.actionDate || ""

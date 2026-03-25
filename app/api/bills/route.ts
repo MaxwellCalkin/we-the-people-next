@@ -8,8 +8,9 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("search");
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
 
-    const bills = await searchBills(query);
+    const bills = await searchBills(query, offset);
 
     return NextResponse.json({ bills });
   } catch (error) {

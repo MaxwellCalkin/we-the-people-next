@@ -2,9 +2,8 @@ import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import { searchBills } from "@/lib/congress";
 import User from "@/models/User";
-import BillCard from "@/components/features/BillCard";
+import BillsInfiniteList from "@/components/features/BillsInfiniteList";
 import SearchBar from "@/components/ui/SearchBar";
-import StaggerReveal from "@/components/animations/StaggerReveal";
 
 export default async function BillsPage() {
   await connectDB();
@@ -35,15 +34,10 @@ export default async function BillsPage() {
       {bills.length === 0 ? (
         <p className="text-cream/60">No bills available at this time.</p>
       ) : (
-        <StaggerReveal className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {bills.map((bill) => (
-            <BillCard
-              key={bill.bill_id}
-              bill={bill}
-              userVotedSlugs={userVotedSlugs}
-            />
-          ))}
-        </StaggerReveal>
+        <BillsInfiniteList
+          initialBills={bills}
+          userVotedSlugs={userVotedSlugs}
+        />
       )}
     </div>
   );
