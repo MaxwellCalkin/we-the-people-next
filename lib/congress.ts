@@ -85,16 +85,14 @@ export async function searchBills(
   offset = 0
 ): Promise<BillResult[]> {
   const congress = getCurrentCongress();
-  const params = new URLSearchParams({
-    limit: "20",
-    sort: "updateDate desc",
-    api_key: process.env.CONGRESS_KEY!,
-    format: "json",
-    offset: String(offset),
-  });
-  if (query) params.set("query", query);
+  let url: string;
 
-  const url = `${CONGRESS_API}/bill/${congress}?${params}`;
+  const base = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
+  if (query) {
+    url = `${base}&query=${encodeURIComponent(query)}`;
+  } else {
+    url = base;
+  }
 
   const resp = await fetch(url);
   const data = await resp.json();
