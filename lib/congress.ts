@@ -180,8 +180,6 @@ async function findCompanionBills(
 ): Promise<{ type: string; number: string }[]> {
   const results: { type: string; number: string }[] = [];
 
-  console.log(`[findCompanionBills] Looking for ${companionType} companion of ${billType}${billNumber} (congress ${congress})`);
-
   // 1) Check related bills endpoint
   try {
     const relUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}/relatedbills?api_key=${process.env.CONGRESS_KEY}&format=json`;
@@ -189,7 +187,6 @@ async function findCompanionBills(
     if (relResp.ok) {
       const relData = await relResp.json();
       const related = relData.relatedBills || [];
-      console.log(`[findCompanionBills] Related bills endpoint returned ${related.length} results`);
       for (const rb of related) {
         const rbType = (rb.type || "").toLowerCase();
         const rbNumber = String(rb.number || "");
@@ -197,71 +194,47 @@ async function findCompanionBills(
           results.push({ type: rbType, number: rbNumber });
         }
       }
-    } else {
-      console.log(`[findCompanionBills] Related bills endpoint returned ${relResp.status}`);
     }
   } catch (e) {
     console.log("Error fetching related bills:", e instanceof Error ? e.message : e);
   }
 
-  if (results.length > 0) {
-    console.log(`[findCompanionBills] Found via related bills:`, results);
-    return results;
-  }
+  if (results.length > 0) return results;
 
-  // 2) Fallback: get this bill's title and search for matching bills
-  //    in the other chamber using multiple search strategies.
+  // 2) Fallback: get this bill's title and check enacted laws for a
+  //    companion bill with the same title in the other chamber.
+  //    The Congress.gov /bill search API doesn't return relevant results,
+  //    but /law/{congress}/pub reliably lists all enacted bills.
   try {
     const billUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}?api_key=${process.env.CONGRESS_KEY}&format=json`;
     const billResp = await fetch(billUrl);
     if (billResp.ok) {
       const billData = await billResp.json();
       const title = billData.bill?.title;
-      console.log(`[companion] title="${title}"`);
       if (title) {
         const titleLower = title.toLowerCase();
-
-        // Try multiple search strategies in order
-        const searchUrls = [
-          // Strategy A: search scoped to companion bill type
-          `${CONGRESS_API}/bill/${congress}/${companionType}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`,
-          // Strategy B: search all bills for this congress
-          `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=50`,
-          // Strategy C: search with quoted title for exact match
-          `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(`"${title}"`)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`,
-        ];
-
-        for (let i = 0; i < searchUrls.length && results.length === 0; i++) {
-          try {
-            const searchResp = await fetch(searchUrls[i]);
-            if (searchResp.ok) {
-              const searchData = await searchResp.json();
-              const bills = searchData.bills || [];
-              console.log(`[companion] strategy ${i}: ${bills.length} results`);
-              for (const b of bills) {
-                const bType = (b.type || "").toLowerCase();
-                const bNumber = String(b.number || "");
-                if (
-                  bType === companionType &&
-                  bNumber &&
-                  (b.title || "").toLowerCase() === titleLower
-                ) {
-                  console.log(`[companion] MATCH: ${companionType}${bNumber}`);
-                  results.push({ type: companionType, number: bNumber });
-                }
-              }
+        const lawUrl = `${CONGRESS_API}/law/${congress}/pub?api_key=${process.env.CONGRESS_KEY}&format=json&limit=250`;
+        const lawResp = await fetch(lawUrl);
+        if (lawResp.ok) {
+          const lawData = await lawResp.json();
+          const laws = lawData.bills || [];
+          for (const b of laws) {
+            const bType = (b.type || "").toLowerCase();
+            const bNumber = String(b.number || "");
+            if (
+              bType === companionType &&
+              bNumber &&
+              (b.title || "").toLowerCase() === titleLower
+            ) {
+              results.push({ type: companionType, number: bNumber });
             }
-          } catch {
-            // Try next strategy
           }
         }
       }
     }
   } catch (e) {
-    console.log("Error searching for companion:", e instanceof Error ? e.message : e);
+    console.log("Error searching enacted laws for companion:", e instanceof Error ? e.message : e);
   }
-
-  console.log(`[companion] found ${results.length} before fallback`);
 
   // 3) Last resort: try same number in other chamber (old behavior)
   if (results.length === 0) {
