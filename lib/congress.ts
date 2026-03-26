@@ -180,6 +180,8 @@ async function findCompanionBills(
 ): Promise<{ type: string; number: string }[]> {
   const results: { type: string; number: string }[] = [];
 
+  console.log(`[findCompanionBills] Looking for ${companionType} companion of ${billType}${billNumber} (congress ${congress})`);
+
   // 1) Check related bills endpoint
   try {
     const relUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}/relatedbills?api_key=${process.env.CONGRESS_KEY}&format=json`;
@@ -187,6 +189,7 @@ async function findCompanionBills(
     if (relResp.ok) {
       const relData = await relResp.json();
       const related = relData.relatedBills || [];
+      console.log(`[findCompanionBills] Related bills endpoint returned ${related.length} results`);
       for (const rb of related) {
         const rbType = (rb.type || "").toLowerCase();
         const rbNumber = String(rb.number || "");
@@ -194,12 +197,17 @@ async function findCompanionBills(
           results.push({ type: rbType, number: rbNumber });
         }
       }
+    } else {
+      console.log(`[findCompanionBills] Related bills endpoint returned ${relResp.status}`);
     }
   } catch (e) {
     console.log("Error fetching related bills:", e instanceof Error ? e.message : e);
   }
 
-  if (results.length > 0) return results;
+  if (results.length > 0) {
+    console.log(`[findCompanionBills] Found via related bills:`, results);
+    return results;
+  }
 
   // 2) Fallback: get this bill's title and search for matching bills in the
   //    other chamber that have been enacted or passed.
@@ -209,6 +217,7 @@ async function findCompanionBills(
     if (billResp.ok) {
       const billData = await billResp.json();
       const title = billData.bill?.title;
+      console.log(`[findCompanionBills] Bill title: "${title}"`);
       if (title) {
         const titleLower = title.toLowerCase();
         const searchUrl = `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`;
@@ -216,6 +225,7 @@ async function findCompanionBills(
         if (searchResp.ok) {
           const searchData = await searchResp.json();
           const bills = searchData.bills || [];
+          console.log(`[findCompanionBills] Title search returned ${bills.length} results:`, bills.map((b: { type?: string; number?: string; title?: string }) => `${b.type}${b.number}: ${b.title}`));
           for (const b of bills) {
             const bType = (b.type || "").toLowerCase();
             const bNumber = String(b.number || "");
@@ -233,6 +243,8 @@ async function findCompanionBills(
   } catch (e) {
     console.log("Error searching for companion bill by title:", e instanceof Error ? e.message : e);
   }
+
+  console.log(`[findCompanionBills] Final results (before fallback):`, results);
 
   // 3) Last resort: try same number in other chamber (old behavior)
   if (results.length === 0) {
