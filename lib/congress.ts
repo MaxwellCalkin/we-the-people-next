@@ -77,7 +77,8 @@ export async function fetchBillDetails(
 }
 
 /**
- * Search bills from Congress.gov. Pass null/undefined/empty string for latest bills.
+ * Search bills. Uses GovTrack API for text search (Congress.gov API doesn't
+ * support it) and Congress.gov API for listing latest bills.
  * `offset` is the 0-based index to start from (for pagination).
  */
 export async function searchBills(
@@ -85,15 +86,13 @@ export async function searchBills(
   offset = 0
 ): Promise<BillResult[]> {
   const congress = getCurrentCongress();
-  let url: string;
 
-  const base = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
   if (query) {
-    url = `${base}&query=${encodeURIComponent(query)}`;
-  } else {
-    url = base;
+    return searchBillsGovTrack(query, congress, offset);
   }
 
+  // No query — list latest bills from Congress.gov
+  const url = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
   const resp = await fetch(url);
   const data = await resp.json();
   const bills = data.bills || [];
@@ -122,6 +121,56 @@ export async function searchBills(
         latest_major_action_date: b.latestAction
           ? b.latestAction.actionDate || ""
           : "",
+      };
+    }
+  );
+}
+
+/** GovTrack bill type strings → our slug prefixes */
+const GOVTRACK_TYPE_MAP: Record<string, string> = {
+  house_bill: "hr",
+  senate_bill: "s",
+  house_resolution: "hres",
+  senate_resolution: "sres",
+  house_joint_resolution: "hjres",
+  senate_joint_resolution: "sjres",
+  house_concurrent_resolution: "hconres",
+  senate_concurrent_resolution: "sconres",
+};
+
+async function searchBillsGovTrack(
+  query: string,
+  congress: number,
+  offset: number
+): Promise<BillResult[]> {
+  const url = `https://www.govtrack.us/api/v2/bill?q=${encodeURIComponent(query)}&congress=${congress}&limit=20&offset=${offset}&sort=-current_status_date`;
+  const resp = await fetch(url);
+  const data = await resp.json();
+  const objects = data.objects || [];
+
+  return objects.map(
+    (b: {
+      bill_type?: string;
+      number?: number;
+      congress?: number;
+      title_without_number?: string;
+      title?: string;
+      introduced_date?: string;
+      current_status_date?: string;
+      current_status_description?: string;
+    }): BillResult => {
+      const type = GOVTRACK_TYPE_MAP[b.bill_type || ""] || "hr";
+      const number = String(b.number || "");
+      return {
+        short_title: b.title_without_number || b.title || "",
+        title: b.title_without_number || b.title || "",
+        bill_id: `${type}${number}-${b.congress || congress}`,
+        bill_slug: `${type}${number}`,
+        bill_type: type,
+        congress: (b.congress || congress).toString(),
+        introduced_date: b.introduced_date || "",
+        latest_major_action: b.current_status_description || "",
+        latest_major_action_date: b.current_status_date || "",
       };
     }
   );
