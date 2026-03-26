@@ -169,6 +169,80 @@ export async function fetchMembers(
 }
 
 /**
+ * Find companion bills in the other chamber by checking the related bills
+ * endpoint first, then falling back to a title-based search.
+ */
+async function findCompanionBills(
+  congress: number | string,
+  billType: string,
+  billNumber: string,
+  companionType: string
+): Promise<{ type: string; number: string }[]> {
+  const results: { type: string; number: string }[] = [];
+
+  // 1) Check related bills endpoint
+  try {
+    const relUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}/relatedbills?api_key=${process.env.CONGRESS_KEY}&format=json`;
+    const relResp = await fetch(relUrl);
+    if (relResp.ok) {
+      const relData = await relResp.json();
+      const related = relData.relatedBills || [];
+      for (const rb of related) {
+        const rbType = (rb.type || "").toLowerCase();
+        const rbNumber = String(rb.number || "");
+        if (rbType === companionType && rbNumber) {
+          results.push({ type: rbType, number: rbNumber });
+        }
+      }
+    }
+  } catch (e) {
+    console.log("Error fetching related bills:", e instanceof Error ? e.message : e);
+  }
+
+  if (results.length > 0) return results;
+
+  // 2) Fallback: get this bill's title and search for matching bills in the
+  //    other chamber that have been enacted or passed.
+  try {
+    const billUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}?api_key=${process.env.CONGRESS_KEY}&format=json`;
+    const billResp = await fetch(billUrl);
+    if (billResp.ok) {
+      const billData = await billResp.json();
+      const title = billData.bill?.title;
+      if (title) {
+        const titleLower = title.toLowerCase();
+        const searchUrl = `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`;
+        const searchResp = await fetch(searchUrl);
+        if (searchResp.ok) {
+          const searchData = await searchResp.json();
+          const bills = searchData.bills || [];
+          for (const b of bills) {
+            const bType = (b.type || "").toLowerCase();
+            const bNumber = String(b.number || "");
+            if (
+              bType === companionType &&
+              bNumber &&
+              (b.title || "").toLowerCase() === titleLower
+            ) {
+              results.push({ type: bType, number: bNumber });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log("Error searching for companion bill by title:", e instanceof Error ? e.message : e);
+  }
+
+  // 3) Last resort: try same number in other chamber (old behavior)
+  if (results.length === 0) {
+    results.push({ type: companionType, number: billNumber });
+  }
+
+  return results;
+}
+
+/**
  * Look up a member's vote on a specific bill using Congress.gov actions endpoint.
  * Checks roll call vote XML from senate.gov and clerk.house.gov.
  *
@@ -223,38 +297,58 @@ export async function getMemberVoteOnBill(
       // check if the House companion bill was passed by the Senate (common for
       // bills where the Senate passes the House version directly via UC).
       // Similarly, if this is a House bill with no action, check the Senate companion.
-      const companionType = billType === "s" ? "hr" : billType === "hr" ? "s" : null;
+      const companionMap: Record<string, string> = {
+        s: "hr",
+        hr: "s",
+        sjres: "hjres",
+        hjres: "sjres",
+        sconres: "hconres",
+        hconres: "sconres",
+      };
+      const companionType = companionMap[billType] || null;
       if (companionType) {
-        try {
-          const companionUrl = `${CONGRESS_API}/bill/${congress}/${companionType}/${billNumber}/actions?api_key=${process.env.CONGRESS_KEY}&format=json&limit=50`;
-          const companionResp = await fetch(companionUrl);
-          if (companionResp.ok) {
-            const companionData = await companionResp.json();
-            const companionActions = companionData.actions || [];
-            for (const ca of companionActions) {
-              const caText = (ca.text || "").toLowerCase();
-              // Check for Senate passage on a House bill (or vice versa)
-              const targetChamber = chamber.toLowerCase();
-              const passedInTarget =
-                (targetChamber === "senate" && (caText.includes("passed/agreed to in senate") || (caText.includes("senate") && (caText.includes("passed") || caText.includes("agreed to"))))) ||
-                (targetChamber === "house" && (caText.includes("passed/agreed to in house") || (caText.includes("house") && (caText.includes("passed") || caText.includes("agreed to")))));
-              if (passedInTarget) {
-                if (caText.includes("unanimous consent") || caText.includes("without objection")) {
-                  return "Passed by Unanimous Consent";
-                }
-                if (caText.includes("voice vote")) {
-                  return "Passed by Voice Vote";
-                }
-                // Check if companion has recorded votes for this chamber
-                if (ca.recordedVotes && ca.recordedVotes.length > 0) {
-                  rollCallVotes.push(...ca.recordedVotes);
-                  break; // Fall through to roll call vote checking below
+        const companionBills = await findCompanionBills(
+          congress,
+          billType,
+          billNumber,
+          companionType
+        );
+        for (const companion of companionBills) {
+          try {
+            const companionUrl = `${CONGRESS_API}/bill/${congress}/${companion.type}/${companion.number}/actions?api_key=${process.env.CONGRESS_KEY}&format=json&limit=50`;
+            const companionResp = await fetch(companionUrl);
+            if (companionResp.ok) {
+              const companionData = await companionResp.json();
+              const companionActions = companionData.actions || [];
+              for (const ca of companionActions) {
+                const caText = (ca.text || "").toLowerCase();
+                // Check for passage in the target chamber
+                const targetChamber = chamber.toLowerCase();
+                const mentionsTarget =
+                  caText.includes(targetChamber) ||
+                  (ca.actionCode || "").toLowerCase().includes(targetChamber);
+                const passedInTarget =
+                  mentionsTarget &&
+                  (caText.includes("passed") || caText.includes("agreed to"));
+                if (passedInTarget) {
+                  if (caText.includes("unanimous consent") || caText.includes("without objection")) {
+                    return "Passed by Unanimous Consent";
+                  }
+                  if (caText.includes("voice vote")) {
+                    return "Passed by Voice Vote";
+                  }
+                  // Check if companion has recorded votes for this chamber
+                  if (ca.recordedVotes && ca.recordedVotes.length > 0) {
+                    rollCallVotes.push(...ca.recordedVotes);
+                    break; // Fall through to roll call vote checking below
+                  }
                 }
               }
             }
+          } catch (e) {
+            console.log("Error checking companion bill:", e instanceof Error ? e.message : e);
           }
-        } catch (e) {
-          console.log("Error checking companion bill:", e instanceof Error ? e.message : e);
+          if (rollCallVotes.length > 0) break;
         }
       }
 
