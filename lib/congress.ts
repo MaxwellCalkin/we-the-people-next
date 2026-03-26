@@ -209,42 +209,59 @@ async function findCompanionBills(
     return results;
   }
 
-  // 2) Fallback: get this bill's title and search for matching bills in the
-  //    other chamber that have been enacted or passed.
+  // 2) Fallback: get this bill's title and search for matching bills
+  //    in the other chamber using multiple search strategies.
   try {
     const billUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}?api_key=${process.env.CONGRESS_KEY}&format=json`;
     const billResp = await fetch(billUrl);
     if (billResp.ok) {
       const billData = await billResp.json();
       const title = billData.bill?.title;
-      console.log(`[findCompanionBills] Bill title: "${title}"`);
+      console.log(`[companion] title="${title}"`);
       if (title) {
         const titleLower = title.toLowerCase();
-        const searchUrl = `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`;
-        const searchResp = await fetch(searchUrl);
-        if (searchResp.ok) {
-          const searchData = await searchResp.json();
-          const bills = searchData.bills || [];
-          console.log(`[findCompanionBills] Title search returned ${bills.length} results:`, bills.map((b: { type?: string; number?: string; title?: string }) => `${b.type}${b.number}: ${b.title}`));
-          for (const b of bills) {
-            const bType = (b.type || "").toLowerCase();
-            const bNumber = String(b.number || "");
-            if (
-              bType === companionType &&
-              bNumber &&
-              (b.title || "").toLowerCase() === titleLower
-            ) {
-              results.push({ type: bType, number: bNumber });
+
+        // Try multiple search strategies in order
+        const searchUrls = [
+          // Strategy A: search scoped to companion bill type
+          `${CONGRESS_API}/bill/${congress}/${companionType}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`,
+          // Strategy B: search all bills for this congress
+          `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(title)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=50`,
+          // Strategy C: search with quoted title for exact match
+          `${CONGRESS_API}/bill/${congress}?query=${encodeURIComponent(`"${title}"`)}&api_key=${process.env.CONGRESS_KEY}&format=json&limit=20`,
+        ];
+
+        for (let i = 0; i < searchUrls.length && results.length === 0; i++) {
+          try {
+            const searchResp = await fetch(searchUrls[i]);
+            if (searchResp.ok) {
+              const searchData = await searchResp.json();
+              const bills = searchData.bills || [];
+              console.log(`[companion] strategy ${i}: ${bills.length} results`);
+              for (const b of bills) {
+                const bType = (b.type || "").toLowerCase();
+                const bNumber = String(b.number || "");
+                if (
+                  bType === companionType &&
+                  bNumber &&
+                  (b.title || "").toLowerCase() === titleLower
+                ) {
+                  console.log(`[companion] MATCH: ${companionType}${bNumber}`);
+                  results.push({ type: companionType, number: bNumber });
+                }
+              }
             }
+          } catch {
+            // Try next strategy
           }
         }
       }
     }
   } catch (e) {
-    console.log("Error searching for companion bill by title:", e instanceof Error ? e.message : e);
+    console.log("Error searching for companion:", e instanceof Error ? e.message : e);
   }
 
-  console.log(`[findCompanionBills] Final results (before fallback):`, results);
+  console.log(`[companion] found ${results.length} before fallback`);
 
   // 3) Last resort: try same number in other chamber (old behavior)
   if (results.length === 0) {
