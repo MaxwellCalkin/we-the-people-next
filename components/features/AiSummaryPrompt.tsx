@@ -41,9 +41,13 @@ export default function AiSummaryPrompt({
   const prompt = buildPrompt(billTitle, govtrackUrl);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy prompt:", err);
+    }
   };
 
   return (
