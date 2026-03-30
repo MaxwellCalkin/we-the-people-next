@@ -6,6 +6,7 @@ import User from "@/models/User";
 import GlassCard from "@/components/ui/GlassCard";
 import VoteForm from "@/components/features/VoteForm";
 import { ExternalLink } from "lucide-react";
+import AiSummaryPrompt from "@/components/features/AiSummaryPrompt";
 
 interface VotePageProps {
   params: Promise<{ slug: string; congress: string }>;
@@ -69,6 +70,12 @@ export default async function VotePage({ params }: VotePageProps) {
         >
           View on GovTrack <ExternalLink className="h-3.5 w-3.5" />
         </a>
+
+        <AiSummaryPrompt
+          billTitle={bill.short_title || bill.title}
+          govtrackUrl={govtrackUrl}
+          hasSummary={!!bill.summary}
+        />
 
         <div className="border-t border-glass-border pt-6">
           <h2 className="font-brand text-xl text-cream mb-4">
