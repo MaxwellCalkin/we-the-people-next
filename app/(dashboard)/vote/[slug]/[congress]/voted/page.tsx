@@ -78,7 +78,7 @@ export default async function VotedPage({ params }: VotedPageProps) {
     }
   }
 
-  // Get WTP community vote counts
+  // Get Heard community vote counts
   const yeasCount = await User.countDocuments({
     yeaBillSlugs: bill.bill_slug,
   });

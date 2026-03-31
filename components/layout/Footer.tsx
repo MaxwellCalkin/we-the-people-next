@@ -19,7 +19,7 @@ export default function Footer({ state }: FooterProps) {
           Click Here to Register to Vote
         </a>
         <p className="mt-4 text-sm text-cream/50">
-          &copy; {new Date().getFullYear()} We The People. All rights reserved.
+          &copy; {new Date().getFullYear()} Heard. All rights reserved.
         </p>
       </div>
     </footer>

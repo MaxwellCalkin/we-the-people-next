@@ -12,7 +12,7 @@ export default function LandingNav() {
             href="/"
             className="font-brand text-xl font-bold text-cream tracking-wider"
           >
-            We The People
+            Heard
           </Link>
           <div className="flex items-center gap-4">
             <Link

@@ -51,7 +51,7 @@ const steps = [
     brief: "Members cast their votes.",
     highlight: true,
     detail:
-      "The moment of truth — representatives vote on the bill. This is exactly where We The People empowers YOU. By voting on bills here, you tell your representatives how you want them to vote. A simple majority (218 in the House, 51 in the Senate) is typically required to pass.",
+      "The moment of truth — representatives vote on the bill. This is exactly where Heard empowers YOU. By voting on bills here, you tell your representatives how you want them to vote. A simple majority (218 in the House, 51 in the Senate) is typically required to pass.",
   },
   {
     icon: ArrowRight,
@@ -441,7 +441,7 @@ function FlowchartNode({
 
         {isHighlight && (
           <p className="text-[11px] text-gold/80 font-medium italic">
-            This is where YOUR voice matters on We The People
+            This is where YOUR voice matters on Heard
           </p>
         )}
       </div>

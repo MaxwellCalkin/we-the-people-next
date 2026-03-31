@@ -46,7 +46,7 @@ export default function LandingPage() {
 
         <ParallaxSection speed={0.3} className="relative z-10 text-center px-4">
           <h1 className="font-brand text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-bold text-cream tracking-wider mb-4">
-            We The People
+            Heard
           </h1>
           <p className="text-2xl sm:text-3xl md:text-4xl font-brand font-light text-gradient mb-6">
             Your Voice Matters
@@ -79,7 +79,7 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl">
           <div className="text-center mb-16">
             <h2 className="font-brand text-3xl sm:text-4xl font-bold text-cream mb-4">
-              Why We The People?
+              Why Heard?
             </h2>
             <p className="text-cream/60 max-w-xl mx-auto">
               We believe in empowering every citizen with the tools to actively
@@ -127,7 +127,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-glass-border py-8 px-4 text-center">
         <p className="text-sm text-cream/40">
-          &copy; {new Date().getFullYear()} We The People. All rights reserved.
+          &copy; {new Date().getFullYear()} Heard. All rights reserved.
         </p>
       </footer>
     </div>

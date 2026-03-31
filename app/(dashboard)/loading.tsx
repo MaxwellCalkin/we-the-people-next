@@ -3,7 +3,7 @@ export default function DashboardLoading() {
     <div className="min-h-[60vh] flex flex-col items-center justify-center px-4">
       {/* Pulsing Logo */}
       <h1 className="font-brand text-3xl sm:text-4xl text-gradient animate-pulse mb-12">
-        We The People
+        Heard
       </h1>
 
       {/* Skeleton Cards */}

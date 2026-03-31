@@ -16,7 +16,7 @@ export default function AuthLayout({
         href="/"
         className="font-brand text-3xl font-bold text-cream tracking-wider mb-10 relative z-10"
       >
-        We The People
+        Heard
       </Link>
 
       {/* Content */}

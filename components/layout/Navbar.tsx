@@ -41,7 +41,7 @@ export default function Navbar() {
               href="/profile"
               className="font-brand text-xl font-bold text-cream tracking-wider"
             >
-              We The People
+              Heard
             </Link>
 
             {/* Desktop Nav */}

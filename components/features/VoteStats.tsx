@@ -17,8 +17,8 @@ export default function VoteStats({
 }: VoteStatsProps) {
   return (
     <div className="grid grid-cols-2 gap-6">
-      <AnimatedCounter target={yeas} label="Total WTP Yeas" />
-      <AnimatedCounter target={nays} label="Total WTP Nays" />
+      <AnimatedCounter target={yeas} label="Total Heard Yeas" />
+      <AnimatedCounter target={nays} label="Total Heard Nays" />
       <AnimatedCounter target={yeasByDistrict} label="District Yeas" />
       <AnimatedCounter target={naysByDistrict} label="District Nays" />
     </div>

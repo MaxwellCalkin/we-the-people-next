@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "We The People",
+  title: "Heard",
   description:
     "A civic engagement platform connecting citizens with their representatives and legislation.",
 };

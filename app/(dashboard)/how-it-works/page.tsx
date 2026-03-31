@@ -3,7 +3,7 @@ import GlassCard from "@/components/ui/GlassCard";
 import MagneticButton from "@/components/ui/MagneticButton";
 
 export const metadata = {
-  title: "How a Bill Becomes a Law | We The People",
+  title: "How a Bill Becomes a Law | Heard",
   description:
     "Learn how the legislative process works and where your voice fits in.",
 };
