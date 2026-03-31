@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import validator from "validator";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
+import { lookupDistrict } from "@/lib/geocodio";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { userName, email, password, confirmPassword, address } = body;
+    const { userName, email, password, confirmPassword, zip, state: selectedState, cd: selectedCd } = body;
 
     // Validate inputs
     const errors: string[] = [];
@@ -23,8 +24,8 @@ export async function POST(req: NextRequest) {
     if (password !== confirmPassword) {
       errors.push("Passwords do not match.");
     }
-    if (!address || validator.isEmpty(address.trim())) {
-      errors.push("Address is required to find your representatives.");
+    if (!zip || !/^\d{5}$/.test(zip)) {
+      errors.push("Please enter a valid 5-digit ZIP code.");
     }
 
     if (errors.length > 0) {
@@ -34,60 +35,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Look up congressional district via Google Civic divisionsByAddress API
-    const civicResp = await fetch(
-      `https://civicinfo.googleapis.com/civicinfo/v2/divisionsByAddress?address=${encodeURIComponent(
-        address
-      )}&key=${process.env.GOOGLE_KEY}`,
-      { method: "GET" }
-    );
-    const civicData = await civicResp.json();
+    // If state and cd were provided (user already selected from split ZIP), use those
+    let state = selectedState;
+    let cd = selectedCd;
 
-    if (!civicData.divisions) {
-      return NextResponse.json(
-        {
-          success: false,
-          errors: [
-            "Could not find your congressional district. Try a more specific address (include city, state, and zip).",
-          ],
-        },
-        { status: 400 }
-      );
-    }
+    if (!state || !cd) {
+      // Look up congressional district via Geocodio
+      const result = await lookupDistrict(zip);
 
-    // Parse OCD-IDs to find state and congressional district
-    const divisionIds = Object.keys(civicData.divisions);
-    let state = "";
-    let cd = "1"; // Default to at-large
-
-    // Find the state from any division ID containing "state:"
-    for (const id of divisionIds) {
-      const stateMatch = id.match(/state:([a-z]{2})/);
-      if (stateMatch) {
-        state = stateMatch[1];
-        break;
+      if (!result) {
+        return NextResponse.json(
+          {
+            success: false,
+            errors: [
+              "Could not find your congressional district. Please check your ZIP code.",
+            ],
+          },
+          { status: 400 }
+        );
       }
-    }
 
-    // Find the congressional district (cd:XX)
-    for (const id of divisionIds) {
-      const cdMatch = id.match(/\/cd:(\d+)/);
-      if (cdMatch) {
-        cd = cdMatch[1];
-        break;
+      if (result.districts.length > 1) {
+        // Split ZIP — return districts for user to pick
+        return NextResponse.json(
+          {
+            success: false,
+            needsDistrictSelection: true,
+            state: result.state,
+            districts: result.districts,
+          },
+          { status: 200 }
+        );
       }
-    }
 
-    if (!state) {
-      return NextResponse.json(
-        {
-          success: false,
-          errors: [
-            "Could not determine your state. Please try a different address.",
-          ],
-        },
-        { status: 400 }
-      );
+      // Single district
+      state = result.state;
+      cd = String(result.districts[0].number);
     }
 
     // Normalize email

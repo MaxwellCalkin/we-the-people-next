@@ -8,16 +8,26 @@ import { toast } from "sonner";
 import GlassCard from "@/components/ui/GlassCard";
 import MagneticButton from "@/components/ui/MagneticButton";
 
+interface District {
+  number: number;
+  proportion: number;
+}
+
 export default function SignupPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     userName: "",
     email: "",
-    address: "",
+    zip: "",
     password: "",
     confirmPassword: "",
   });
   const [loading, setLoading] = useState(false);
+
+  // District selection state for split ZIPs
+  const [districts, setDistricts] = useState<District[] | null>(null);
+  const [splitState, setSplitState] = useState<string>("");
+  const [selectedDistrict, setSelectedDistrict] = useState<number | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -28,13 +38,30 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
+      const payload: Record<string, string> = { ...form };
+
+      // If user has selected a district from a split ZIP, include it
+      if (selectedDistrict !== null && splitState) {
+        payload.state = splitState;
+        payload.cd = String(selectedDistrict);
+      }
+
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
+
+      // Handle split ZIP — need district selection
+      if (data.needsDistrictSelection) {
+        setDistricts(data.districts);
+        setSplitState(data.state);
+        setSelectedDistrict(data.districts[0]?.number ?? null);
+        setLoading(false);
+        return;
+      }
 
       if (!data.success) {
         const errors: string[] = data.errors || ["Signup failed."];
@@ -110,23 +137,26 @@ export default function SignupPage() {
 
         <div>
           <label
-            htmlFor="address"
+            htmlFor="zip"
             className="block text-sm text-cream/70 mb-1.5"
           >
-            Address
+            ZIP Code
           </label>
           <input
-            id="address"
-            name="address"
+            id="zip"
+            name="zip"
             type="text"
-            value={form.address}
+            inputMode="numeric"
+            pattern="[0-9]{5}"
+            maxLength={5}
+            value={form.zip}
             onChange={handleChange}
-            placeholder="123 Main St, City, State, Zip"
+            placeholder="12345"
             required
             className={inputClasses}
           />
           <p className="mt-1 text-xs text-cream/40">
-            Used to find your congressional district
+            Used to find your congressional district. We never store your ZIP code.
           </p>
         </div>
 
@@ -168,9 +198,45 @@ export default function SignupPage() {
           />
         </div>
 
+        {/* District selection for split ZIPs */}
+        {districts && (
+          <div>
+            <label className="block text-sm text-cream/70 mb-1.5">
+              Your ZIP code spans multiple congressional districts. Please select yours:
+            </label>
+            <div className="flex flex-col gap-2">
+              {districts.map((d) => (
+                <label
+                  key={d.number}
+                  className="flex items-center gap-3 p-3 rounded-lg border border-glass-border bg-white/5 cursor-pointer hover:bg-white/10 transition-colors"
+                >
+                  <input
+                    type="radio"
+                    name="district"
+                    value={d.number}
+                    checked={selectedDistrict === d.number}
+                    onChange={() => setSelectedDistrict(d.number)}
+                    className="accent-gold"
+                  />
+                  <span className="text-cream">
+                    {splitState.toUpperCase()} District {d.number}
+                  </span>
+                  <span className="text-cream/40 text-xs ml-auto">
+                    {Math.round(d.proportion * 100)}% of ZIP
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="pt-2 flex justify-center">
           <MagneticButton type="submit" disabled={loading}>
-            {loading ? "Creating Account..." : "Sign Up"}
+            {loading
+              ? "Creating Account..."
+              : districts
+                ? "Complete Sign Up"
+                : "Sign Up"}
           </MagneticButton>
         </div>
       </form>
