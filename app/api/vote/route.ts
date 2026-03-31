@@ -23,64 +23,44 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await User.findById(session.user.id);
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    if (action === "yea") {
-      // Only add if user hasn't already voted yea on this bill
-      if (!user.yeaBillSlugs.includes(billSlug)) {
-        await User.findByIdAndUpdate(user._id, {
-          $push: { yeaBillSlugs: billSlug },
-        });
-
-        const billExists = await Bill.exists({ billSlug });
-
-        if (!billExists) {
-          await Bill.create({
-            title: title || "",
-            billSlug,
-            congress,
-            image: "/imgs/wtp.png",
-            cloudinaryId: "",
-            givenSummary: summary || "",
-            nays: 0,
-            yeas: 1,
-          });
-        } else {
-          await Bill.findOneAndUpdate({ billSlug }, { $inc: { yeas: 1 } });
-        }
-      }
-    } else if (action === "nay") {
-      // Only add if user hasn't already voted nay on this bill
-      if (!user.nayBillSlugs.includes(billSlug)) {
-        await User.findByIdAndUpdate(user._id, {
-          $push: { nayBillSlugs: billSlug },
-        });
-
-        const billExists = await Bill.exists({ billSlug });
-
-        if (!billExists) {
-          await Bill.create({
-            title: title || "",
-            billSlug,
-            congress,
-            image: "/imgs/wtp.png",
-            cloudinaryId: "",
-            givenSummary: summary || "",
-            nays: 1,
-            yeas: 0,
-          });
-        } else {
-          await Bill.findOneAndUpdate({ billSlug }, { $inc: { nays: 1 } });
-        }
-      }
-    } else {
+    if (action !== "yea" && action !== "nay") {
       return NextResponse.json(
         { error: "Invalid action. Must be 'yea' or 'nay'" },
         { status: 400 }
       );
+    }
+
+    // Atomic check-and-update to prevent race conditions
+    const result = await User.findOneAndUpdate(
+      {
+        _id: session.user.id,
+        yeaBillSlugs: { $ne: billSlug },
+        nayBillSlugs: { $ne: billSlug },
+      },
+      { $push: { [action === "yea" ? "yeaBillSlugs" : "nayBillSlugs"]: billSlug } },
+      { new: true }
+    );
+    if (!result) {
+      return NextResponse.json({ error: "Already voted" }, { status: 409 });
+    }
+
+    // Update or create the Bill document
+    const voteField = action === "yea" ? "yeas" : "nays";
+    const billExists = await Bill.exists({ billSlug });
+
+    if (!billExists) {
+      await Bill.create({
+        title: title || "",
+        billSlug,
+        congress,
+        image: "/imgs/wtp.png",
+        cloudinaryId: "",
+        givenSummary: summary || "",
+        nays: action === "nay" ? 1 : 0,
+        yeas: action === "yea" ? 1 : 0,
+      });
+    } else {
+      await Bill.findOneAndUpdate({ billSlug }, { $inc: { [voteField]: 1 } });
     }
 
     return NextResponse.json({ success: true });
