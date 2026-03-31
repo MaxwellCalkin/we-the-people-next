@@ -183,6 +183,8 @@ export async function fetchMembers(
   state: string,
   district?: string | number
 ): Promise<MemberResult[]> {
+  if (!state) return [];
+
   const base = `${CONGRESS_API}/member`;
   let url: string;
 

@@ -20,6 +20,9 @@ export default async function ProfilePage() {
   const userState = user.state;
   const userCd = user.cd;
 
+  // Redirect to onboarding if district not set
+  if (!userState || !userCd) redirect("/onboarding");
+
   // Fetch House rep and senators
   const houseReps = await fetchMembers(userState, userCd);
   const allStateMembers = await fetchMembers(userState);

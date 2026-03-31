@@ -4,13 +4,19 @@ import { NextResponse } from "next/server";
 export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
-  const needsOnboarding = req.auth?.user?.needsOnboarding;
 
   const isOnboarding = nextUrl.pathname === "/onboarding";
   const isApiRoute = nextUrl.pathname.startsWith("/api");
 
-  if (isLoggedIn && needsOnboarding && !isOnboarding && !isApiRoute) {
-    return NextResponse.redirect(new URL("/onboarding", nextUrl));
+  if (isLoggedIn && !isOnboarding && !isApiRoute) {
+    // Check session for missing district — needsOnboarding flag
+    const needsOnboarding = req.auth?.user?.needsOnboarding;
+    // Also check directly in case the flag wasn't set
+    const state = req.auth?.user?.state;
+    const cd = req.auth?.user?.cd;
+    if (needsOnboarding || !state || !cd) {
+      return NextResponse.redirect(new URL("/onboarding", nextUrl));
+    }
   }
 });
 
