@@ -46,6 +46,22 @@ export default function LoginPage() {
         Welcome Back
       </h1>
 
+      <div className="flex flex-col gap-4 mb-2">
+        <MagneticButton
+          type="button"
+          onClick={() => signIn("google", { callbackUrl: "/bills" })}
+          className="w-full"
+        >
+          Sign in with Google
+        </MagneticButton>
+      </div>
+
+      <div className="flex items-center gap-4 my-2">
+        <div className="flex-1 h-px bg-glass-border" />
+        <span className="text-sm text-cream/50">or</span>
+        <div className="flex-1 h-px bg-glass-border" />
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
           <label htmlFor="email" className="block text-sm text-cream/70 mb-1.5">

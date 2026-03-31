@@ -4,7 +4,8 @@ import bcrypt from "bcryptjs";
 export interface IUser extends Document {
   userName: string;
   email: string;
-  password: string;
+  password?: string;
+  provider: "credentials" | "google";
   state: string;
   cd: string;
   yeaBillSlugs: string[];
@@ -13,9 +14,14 @@ export interface IUser extends Document {
 }
 
 const UserSchema = new Schema<IUser>({
-  userName: { type: String, unique: true },
+  userName: { type: String, unique: true, sparse: true },
   email: { type: String, unique: true },
-  password: String,
+  password: { type: String, required: false },
+  provider: {
+    type: String,
+    enum: ["credentials", "google"],
+    default: "credentials",
+  },
   state: { type: String },
   cd: { type: String },
   yeaBillSlugs: { type: [String], required: false, default: [] },
@@ -24,7 +30,7 @@ const UserSchema = new Schema<IUser>({
 
 // Password hash middleware
 UserSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+  if (!this.isModified("password") || !this.password) return;
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });

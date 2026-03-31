@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
 
@@ -9,6 +10,7 @@ declare module "next-auth" {
     state?: string;
     cd?: string;
     userName?: string;
+    needsOnboarding?: boolean;
   }
 
   interface Session {
@@ -18,6 +20,7 @@ declare module "next-auth" {
       state: string;
       cd: string;
       userName: string;
+      needsOnboarding: boolean;
     };
   }
 }
@@ -28,11 +31,16 @@ declare module "@auth/core/jwt" {
     state?: string;
     cd?: string;
     userName?: string;
+    needsOnboarding?: boolean;
   }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     Credentials({
       name: "Credentials",
       credentials: {
@@ -60,12 +68,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        const needsOnboarding = !user.state || !user.cd;
+
         return {
           id: user._id.toString(),
           email: user.email,
           userName: user.userName,
           state: user.state,
           cd: user.cd,
+          needsOnboarding,
         };
       },
     }),
@@ -77,12 +88,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ user, account }) {
+      if (account?.provider === "google") {
+        await connectDB();
+        const existingUser = await User.findOne({ email: user.email });
+        if (!existingUser) {
+          await User.create({
+            email: user.email!,
+            userName: user.name ?? user.email!,
+            provider: "google",
+          });
+        }
+      }
+      return true;
+    },
+    async jwt({ token, user, account }) {
       if (user) {
-        token.id = user.id;
-        token.state = user.state;
-        token.cd = user.cd;
-        token.userName = user.userName;
+        if (account?.provider === "google") {
+          await connectDB();
+          const dbUser = await User.findOne({ email: user.email });
+          if (dbUser) {
+            token.id = dbUser._id.toString();
+            token.state = dbUser.state;
+            token.cd = dbUser.cd;
+            token.userName = dbUser.userName;
+            token.needsOnboarding = !dbUser.state || !dbUser.cd;
+          }
+        } else {
+          token.id = user.id;
+          token.state = user.state;
+          token.cd = user.cd;
+          token.userName = user.userName;
+          token.needsOnboarding = user.needsOnboarding;
+        }
       }
       return token;
     },
@@ -92,6 +130,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.state = token.state as string;
         session.user.cd = token.cd as string;
         session.user.userName = token.userName as string;
+        session.user.needsOnboarding = !!token.needsOnboarding;
       }
       return session;
     },

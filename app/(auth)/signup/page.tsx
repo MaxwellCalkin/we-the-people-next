@@ -99,6 +99,22 @@ export default function SignupPage() {
         Create Your Account
       </h1>
 
+      <div className="flex flex-col gap-4 mb-2">
+        <MagneticButton
+          type="button"
+          onClick={() => signIn("google", { callbackUrl: "/bills" })}
+          className="w-full"
+        >
+          Sign up with Google
+        </MagneticButton>
+      </div>
+
+      <div className="flex items-center gap-4 my-2">
+        <div className="flex-1 h-px bg-glass-border" />
+        <span className="text-sm text-cream/50">or</span>
+        <div className="flex-1 h-px bg-glass-border" />
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <label
