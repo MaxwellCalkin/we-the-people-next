@@ -189,7 +189,7 @@ export default function SignupPage() {
             type="password"
             value={form.password}
             onChange={handleChange}
-            placeholder="At least 8 characters"
+            placeholder="At least 10 characters"
             required
             className={inputClasses}
           />

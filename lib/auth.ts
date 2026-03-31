@@ -103,7 +103,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return true;
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger }) {
       if (user) {
         if (account?.provider === "google") {
           await connectDB();
@@ -123,6 +123,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.needsOnboarding = user.needsOnboarding;
         }
       }
+
+      // On session update (e.g. after onboarding), refresh from DB
+      if (trigger === "update" && token.id) {
+        await connectDB();
+        const dbUser = await User.findById(token.id).lean();
+        if (dbUser) {
+          token.state = dbUser.state;
+          token.cd = dbUser.cd;
+          token.userName = dbUser.userName;
+          token.needsOnboarding = !dbUser.state || !dbUser.cd;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {

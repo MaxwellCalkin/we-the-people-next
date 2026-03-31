@@ -63,14 +63,15 @@ export default function OnboardingPage() {
         return;
       }
 
-      // Single district — save immediately
-      if (data.state && data.cd !== undefined && !data.districts) {
-        await saveDistrictAndRedirect(data.state, String(data.cd));
+      // Response always has { state, districts[] }
+      if (data.districts && data.districts.length === 1) {
+        // Single district — save immediately
+        await saveDistrictAndRedirect(data.state, String(data.districts[0].number));
         return;
       }
 
-      // Split ZIP — show district picker
-      if (data.districts) {
+      if (data.districts && data.districts.length > 1) {
+        // Split ZIP — show district picker
         setDistricts(data.districts);
         setSplitState(data.state);
         setSelectedDistrict(data.districts[0]?.number ?? null);
