@@ -87,6 +87,9 @@ export default async function VotedPage({ params }: VotedPageProps) {
   const naysCount = await User.countDocuments({
     nayBillSlugs: bill.bill_slug,
   });
+
+  // TEMP DEBUG — remove after fixing
+  const _debug = { billSlug: bill.bill_slug, urlSlug: slug, yeasCount, naysCount };
   const yeasByDistrict = await User.countDocuments({
     yeaBillSlugs: bill.bill_slug,
     state: userState,
@@ -108,6 +111,8 @@ export default async function VotedPage({ params }: VotedPageProps) {
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* TEMP DEBUG */}
+      <pre className="text-xs text-cream/50 bg-black/30 p-2 rounded">{JSON.stringify(_debug)}</pre>
       {/* Bill Info */}
       <GlassCard>
         <h1 className="font-brand text-2xl sm:text-3xl text-gradient mb-4">
