@@ -46,27 +46,35 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Already voted" }, { status: 409 });
     }
 
-    // Update or create the Bill document
+    // Update or create the Bill document (non-blocking — user vote is already saved)
     const voteField = action === "yea" ? "yeas" : "nays";
-    const billExists = await Bill.exists({ billSlug });
+    try {
+      const billExists = await Bill.exists({ billSlug });
 
-    if (!billExists) {
-      await Bill.create({
-        title: title || "",
-        billSlug,
-        congress,
-        image: "/imgs/wtp.png",
-        cloudinaryId: "",
-        givenSummary: summary || "",
-        nays: action === "nay" ? 1 : 0,
-        yeas: action === "yea" ? 1 : 0,
-      });
-    } else {
-      await Bill.findOneAndUpdate({ billSlug }, { $inc: { [voteField]: 1 } });
+      if (!billExists) {
+        await Bill.create({
+          title: title || "",
+          billSlug,
+          congress,
+          image: "/imgs/wtp.png",
+          cloudinaryId: "",
+          givenSummary: summary || "",
+          nays: action === "nay" ? 1 : 0,
+          yeas: action === "yea" ? 1 : 0,
+        });
+      } else {
+        await Bill.findOneAndUpdate({ billSlug }, { $inc: { [voteField]: 1 } });
+      }
+    } catch (billErr) {
+      console.error("Bill create/update failed:", billErr instanceof Error ? billErr.message : billErr);
     }
 
-    // Create vote event for trending/top calculations
-    await BillVoteEvent.create({ billSlug, congress, votedAt: new Date() });
+    // Create vote event for trending/top calculations (non-blocking)
+    try {
+      await BillVoteEvent.create({ billSlug, congress, votedAt: new Date() });
+    } catch (eventErr) {
+      console.error("BillVoteEvent create failed:", eventErr instanceof Error ? eventErr.message : eventErr);
+    }
 
     // Async: cache member votes and recompute alignment scores (non-blocking)
     cacheVotesAndRecomputeScores(billSlug, congress).catch((err) =>
