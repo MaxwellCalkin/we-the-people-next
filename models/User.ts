@@ -8,6 +8,7 @@ export interface IUser extends Document {
   provider: "credentials" | "google";
   state: string;
   cd: string;
+  avatar?: string;
   yeaBillSlugs: string[];
   nayBillSlugs: string[];
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -24,6 +25,7 @@ const UserSchema = new Schema<IUser>({
   },
   state: { type: String },
   cd: { type: String },
+  avatar: { type: String, default: null },
   yeaBillSlugs: { type: [String], required: false, default: [] },
   nayBillSlugs: { type: [String], required: false, default: [] },
 });
