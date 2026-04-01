@@ -2,9 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-
-gsap.registerPlugin(ScrollTrigger);
 
 interface AnimatedCounterProps {
   target: number;
@@ -15,13 +12,12 @@ interface AnimatedCounterProps {
 export default function AnimatedCounter({
   target,
   label,
-  duration = 2,
+  duration = 1.5,
 }: AnimatedCounterProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const numberRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current || !numberRef.current) return;
+    if (!numberRef.current) return;
 
     const counter = { value: 0 };
 
@@ -29,26 +25,22 @@ export default function AnimatedCounter({
       value: target,
       duration,
       ease: "power2.out",
-      scrollTrigger: {
-        trigger: containerRef.current,
-        start: "top 85%",
-        once: true,
-      },
       onUpdate: () => {
         if (numberRef.current) {
-          numberRef.current.textContent = Math.round(counter.value).toLocaleString();
+          numberRef.current.textContent = Math.round(
+            counter.value
+          ).toLocaleString();
         }
       },
     });
 
     return () => {
       tween.kill();
-      ScrollTrigger.getAll().forEach((st) => st.kill());
     };
   }, [target, duration]);
 
   return (
-    <div ref={containerRef} className="text-center">
+    <div className="text-center">
       <span
         ref={numberRef}
         className="block text-5xl md:text-6xl font-bold text-gradient"
