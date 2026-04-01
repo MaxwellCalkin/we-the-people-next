@@ -98,7 +98,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email!,
             userName: user.name ?? user.email!,
             provider: "google",
-            avatar: (profile as { picture?: string })?.picture || null,
+            avatar: (profile as { picture?: string })?.picture || undefined,
           });
         } else if (!existingUser.avatar && (profile as { picture?: string })?.picture) {
           existingUser.avatar = (profile as { picture?: string }).picture!;
