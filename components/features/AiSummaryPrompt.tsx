@@ -35,7 +35,7 @@ export default function AiSummaryPrompt({
   govtrackUrl,
   hasSummary,
 }: AiSummaryPromptProps) {
-  const [open, setOpen] = useState(!hasSummary);
+  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const prompt = buildPrompt(billTitle, govtrackUrl);
