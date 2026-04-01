@@ -10,8 +10,6 @@ import {
   getMemberVoteOnBill,
   parseBillSlug,
 } from "@/lib/congress";
-import User from "@/models/User";
-import Bill from "@/models/Bill";
 import Post from "@/models/Post";
 import GlassCard from "@/components/ui/GlassCard";
 import VoteStats from "@/components/features/VoteStats";
@@ -81,26 +79,6 @@ export default async function VotedPage({ params }: VotedPageProps) {
     }
   }
 
-  // Ensure DB is connected before querying (connectDB() may have gone stale)
-  await connectDB();
-
-  // Get Heard community vote counts
-  const billDoc = await Bill.findOne({ billSlug: bill.bill_slug })
-    .select("yeas nays")
-    .lean();
-  const yeasCount = billDoc?.yeas ?? 0;
-  const naysCount = billDoc?.nays ?? 0;
-  const yeasByDistrict = await User.countDocuments({
-    yeaBillSlugs: bill.bill_slug,
-    state: userState,
-    cd: userCd,
-  });
-  const naysByDistrict = await User.countDocuments({
-    nayBillSlugs: bill.bill_slug,
-    state: userState,
-    cd: userCd,
-  });
-
   // Check if user has a post for this bill
   const existingPost = await Post.findOne({
     user: session.user.id,
@@ -131,12 +109,7 @@ export default async function VotedPage({ params }: VotedPageProps) {
         <h2 className="font-brand text-xl text-cream mb-6 text-center">
           Community Votes
         </h2>
-        <VoteStats
-          yeas={yeasCount}
-          nays={naysCount}
-          yeasByDistrict={yeasByDistrict}
-          naysByDistrict={naysByDistrict}
-        />
+        <VoteStats billSlug={bill.bill_slug} />
       </GlassCard>
 
       {/* Representative Votes */}
