@@ -28,11 +28,11 @@ const BillSchema = new Schema<IBill>({
   },
   image: {
     type: String,
-    required: true,
+    default: "/imgs/wtp.png",
   },
   cloudinaryId: {
     type: String,
-    required: true,
+    default: "",
   },
   givenSummary: {
     type: String,
