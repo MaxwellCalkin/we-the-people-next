@@ -1,7 +1,11 @@
 /**
- * Seed MemberVote collection with roll call votes from bills since Jan 1, 2025.
- * Fetches all roll call votes from Congress.gov, parses Senate/House XML,
- * and bulk-upserts into MemberVote.
+ * Seed MemberVote collection with roll call votes since Jan 1, 2025.
+ *
+ * Strategy: Instead of iterating every bill (slow), fetch roll call vote
+ * listings directly from Senate and House XML indexes, then parse each one.
+ *
+ * - Senate: https://www.senate.gov/legislative/LIS/roll_call_votes/vote1191/vote_119_1_XXXXX.xml
+ * - House: https://clerk.house.gov/evs/2025/rollNNN.xml
  *
  * Run with: npx tsx scripts/seed-member-votes.ts
  */
@@ -26,8 +30,6 @@ try {
   console.error("Could not read .env.local");
 }
 
-const CONGRESS_API = "https://api.congress.gov/v3";
-const API_KEY = process.env.CONGRESS_KEY;
 const MONGO_URI = process.env.DB_STRING;
 
 const MemberVoteSchema = new mongoose.Schema({
@@ -42,12 +44,10 @@ MemberVoteSchema.index(
   { bioguideId: 1, billSlug: 1, congress: 1 },
   { unique: true }
 );
-
 const MemberVote =
   mongoose.models.MemberVote ||
   mongoose.model("MemberVote", MemberVoteSchema);
 
-// Also create Bill model to store titles for non-community bills
 const BillSchema = new mongoose.Schema({
   title: String,
   billSlug: String,
@@ -60,9 +60,7 @@ const BillSchema = new mongoose.Schema({
   nays: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now },
 });
-
-const Bill =
-  mongoose.models.Bill || mongoose.model("Bill", BillSchema);
+const Bill = mongoose.models.Bill || mongoose.model("Bill", BillSchema);
 
 function normalizeVote(vote: string): string {
   if (vote === "Aye") return "Yea";
@@ -70,164 +68,130 @@ function normalizeVote(vote: string): string {
   return vote;
 }
 
-/** Delay helper to respect API rate limits */
 function delay(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-interface RollCallVote {
-  url: string;
-  chamber: string;
-  billSlug: string;
-  congress: string;
-  billTitle: string;
-}
-
-async function fetchBillsWithRollCalls(): Promise<RollCallVote[]> {
-  const congress = 119; // 2025-2026
-  const rollCalls: RollCallVote[] = [];
-  const billTypes = ["hr", "s", "hjres", "sjres"];
-
-  for (const billType of billTypes) {
-    let offset = 0;
-    const limit = 250;
-
-    while (true) {
-      const url = `${CONGRESS_API}/bill/${congress}/${billType}?limit=${limit}&offset=${offset}&fromDateTime=2025-01-01T00:00:00Z&sort=updateDate+desc&api_key=${API_KEY}&format=json`;
-      console.log(`Fetching ${billType} bills offset=${offset}...`);
-
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        console.log(`  Failed: ${resp.status}`);
-        break;
-      }
-      const data = await resp.json();
-      const bills = data.bills || [];
-
-      if (bills.length === 0) break;
-
-      for (const b of bills) {
-        const bType = (b.type || billType).toLowerCase();
-        const bNumber = String(b.number || "");
-        if (!bNumber) continue;
-
-        const slug = `${bType}${bNumber}`;
-        const billCongress = String(b.congress || congress);
-        const title = b.title || "";
-
-        // Fetch actions to find roll call votes
-        await delay(200); // Rate limit
-        try {
-          const actionsUrl = `${CONGRESS_API}/bill/${billCongress}/${bType}/${bNumber}/actions?api_key=${API_KEY}&format=json&limit=50`;
-          const actionsResp = await fetch(actionsUrl);
-          if (!actionsResp.ok) continue;
-          const actionsData = await actionsResp.json();
-          const actions = actionsData.actions || [];
-
-          for (const action of actions) {
-            if (action.recordedVotes && action.recordedVotes.length > 0) {
-              for (const rv of action.recordedVotes) {
-                if (!rv.url) continue;
-                const chamber = rv.url.includes("senate.gov")
-                  ? "Senate"
-                  : "House";
-                rollCalls.push({
-                  url: rv.url,
-                  chamber,
-                  billSlug: slug,
-                  congress: billCongress,
-                  billTitle: title,
-                });
-              }
-            }
-          }
-        } catch (e) {
-          console.log(`  Error fetching actions for ${slug}:`, e instanceof Error ? e.message : e);
-        }
-      }
-
-      offset += limit;
-      if (bills.length < limit) break;
-      await delay(500);
-    }
-  }
-
-  return rollCalls;
-}
-
-async function parseAndStoreRollCall(rv: RollCallVote): Promise<number> {
-  const bulkOps: {
-    updateOne: {
-      filter: { bioguideId: string; billSlug: string; congress: string };
-      update: {
-        $set: { vote: string; chamber: string; fetchedAt: Date };
-      };
-      upsert: boolean;
-    };
-  }[] = [];
+/**
+ * Parse a Senate roll call XML and extract bill info + all member votes.
+ */
+async function parseSenateVote(
+  session: number,
+  voteNumber: number
+): Promise<{ billSlug: string; congress: string; title: string; votes: { bioguideId: string; vote: string }[] } | null> {
+  const paddedVote = String(voteNumber).padStart(5, "0");
+  const url = `https://www.senate.gov/legislative/LIS/roll_call_votes/vote119${session}/vote_119_${session}_${paddedVote}.xml`;
 
   try {
-    const xmlResp = await fetch(rv.url);
-    if (!xmlResp.ok) return 0;
-    const xmlText = await xmlResp.text();
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const xml = await resp.text();
 
-    if (rv.chamber === "Senate") {
-      const memberRegex =
-        /<member>[\s\S]*?<bioguide_id>([^<]+)<\/bioguide_id>[\s\S]*?<vote_cast>([^<]+)<\/vote_cast>[\s\S]*?<\/member>/gi;
-      let match;
-      while ((match = memberRegex.exec(xmlText)) !== null) {
-        bulkOps.push({
-          updateOne: {
-            filter: {
-              bioguideId: match[1].trim(),
-              billSlug: rv.billSlug,
-              congress: rv.congress,
-            },
-            update: {
-              $set: {
-                vote: normalizeVote(match[2].trim()),
-                chamber: "Senate",
-                fetchedAt: new Date(),
-              },
-            },
-            upsert: true,
-          },
-        });
-      }
-    } else {
-      const memberRegex =
-        /name-id="([^"]+)"[^>]*>[\s\S]*?<vote>([^<]+)<\/vote>/gi;
-      let match;
-      while ((match = memberRegex.exec(xmlText)) !== null) {
-        bulkOps.push({
-          updateOne: {
-            filter: {
-              bioguideId: match[1].trim(),
-              billSlug: rv.billSlug,
-              congress: rv.congress,
-            },
-            update: {
-              $set: {
-                vote: normalizeVote(match[2].trim()),
-                chamber: "House",
-                fetchedAt: new Date(),
-              },
-            },
-            upsert: true,
-          },
-        });
-      }
+    // Extract bill info
+    let billSlug = "";
+    let title = "";
+    const congress = "119";
+
+    // Try <document><document_name> for bill type+number
+    const docMatch = xml.match(/<document_name>([^<]+)<\/document_name>/);
+    if (docMatch) {
+      // e.g. "H.R. 1234" or "S. 567" or "H.J.Res. 12"
+      const docName = docMatch[1].trim();
+      billSlug = docName
+        .replace(/\.\s*/g, "")
+        .replace(/\s+/g, "")
+        .replace(/Res/i, "res")
+        .replace(/^HR/i, "hr")
+        .replace(/^S(?!res)/i, "s")
+        .replace(/^HJ/i, "hj")
+        .replace(/^SJ/i, "sj")
+        .replace(/^HC/i, "hc")
+        .replace(/^SC/i, "sc")
+        .toLowerCase();
     }
-  } catch (e) {
-    console.log(`  Error parsing XML ${rv.url}:`, e instanceof Error ? e.message : e);
-    return 0;
-  }
 
-  if (bulkOps.length > 0) {
-    await MemberVote.bulkWrite(bulkOps);
-  }
+    // Try <document><document_title>
+    const titleMatch = xml.match(/<document_title>([^<]*)<\/document_title>/);
+    if (titleMatch) title = titleMatch[1].trim();
 
-  return bulkOps.length;
+    // Also try <question> for context
+    if (!title) {
+      const qMatch = xml.match(/<question>([^<]*)<\/question>/);
+      if (qMatch) title = qMatch[1].trim();
+    }
+
+    if (!billSlug) return null; // Skip non-bill votes (nominations, etc.)
+
+    // Extract member votes
+    const votes: { bioguideId: string; vote: string }[] = [];
+    const memberRegex = /<member>[\s\S]*?<bioguide_id>([^<]+)<\/bioguide_id>[\s\S]*?<vote_cast>([^<]+)<\/vote_cast>[\s\S]*?<\/member>/gi;
+    let match;
+    while ((match = memberRegex.exec(xml)) !== null) {
+      votes.push({
+        bioguideId: match[1].trim(),
+        vote: normalizeVote(match[2].trim()),
+      });
+    }
+
+    return { billSlug, congress, title, votes };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a House roll call XML and extract bill info + all member votes.
+ */
+async function parseHouseVote(
+  year: number,
+  rollNumber: number
+): Promise<{ billSlug: string; congress: string; title: string; votes: { bioguideId: string; vote: string }[] } | null> {
+  const paddedRoll = String(rollNumber).padStart(3, "0");
+  const url = `https://clerk.house.gov/evs/${year}/roll${paddedRoll}.xml`;
+
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const xml = await resp.text();
+
+    // Extract bill info from <legis-num> like "H R 1234" or "H J RES 12"
+    let billSlug = "";
+    const congress = "119";
+
+    const legisMatch = xml.match(/<legis-num>([^<]*)<\/legis-num>/);
+    if (legisMatch) {
+      const legis = legisMatch[1].trim();
+      billSlug = legis
+        .replace(/\s+/g, "")
+        .replace(/JRES/i, "jres")
+        .replace(/CONRES/i, "conres")
+        .replace(/RES/i, "res")
+        .replace(/^HR(?!es)/i, "hr")
+        .replace(/^S(?!res|conres)/i, "s")
+        .toLowerCase();
+    }
+
+    if (!billSlug) return null; // Skip procedural votes
+
+    let title = "";
+    const titleMatch = xml.match(/<vote-desc>([^<]*)<\/vote-desc>/);
+    if (titleMatch) title = titleMatch[1].trim();
+
+    // Extract member votes
+    const votes: { bioguideId: string; vote: string }[] = [];
+    const memberRegex = /name-id="([^"]+)"[^>]*>[\s\S]*?<vote>([^<]+)<\/vote>/gi;
+    let match;
+    while ((match = memberRegex.exec(xml)) !== null) {
+      votes.push({
+        bioguideId: match[1].trim(),
+        vote: normalizeVote(match[2].trim()),
+      });
+    }
+
+    return { billSlug, congress, title, votes };
+  } catch {
+    return null;
+  }
 }
 
 async function main() {
@@ -235,83 +199,132 @@ async function main() {
     console.error("No DB_STRING found in .env.local");
     process.exit(1);
   }
-  if (!API_KEY) {
-    console.error("No CONGRESS_KEY found in .env.local");
-    process.exit(1);
-  }
 
   await mongoose.connect(MONGO_URI);
-  console.log("Connected to MongoDB");
+  console.log("Connected to MongoDB\n");
 
-  console.log("Fetching bills with roll call votes since Jan 1, 2025...\n");
-  const rollCalls = await fetchBillsWithRollCalls();
+  let totalVotesStored = 0;
+  let totalRollCalls = 0;
+  const billTitles = new Map<string, string>();
 
-  // Deduplicate by URL (same roll call can appear on companion bills)
-  const uniqueRollCalls = new Map<string, RollCallVote>();
-  for (const rv of rollCalls) {
-    const key = `${rv.url}|${rv.billSlug}`;
-    if (!uniqueRollCalls.has(key)) {
-      uniqueRollCalls.set(key, rv);
+  // --- SENATE VOTES ---
+  // 119th Congress: Session 1 = 2025, Session 2 = 2026
+  console.log("=== Fetching Senate roll call votes ===");
+  for (const session of [1, 2]) {
+    let voteNum = 1;
+    let consecutive404s = 0;
+
+    while (consecutive404s < 5) {
+      const result = await parseSenateVote(session, voteNum);
+
+      if (!result) {
+        consecutive404s++;
+        voteNum++;
+        continue;
+      }
+      consecutive404s = 0;
+
+      if (result.votes.length > 0) {
+        const bulkOps = result.votes.map((v) => ({
+          updateOne: {
+            filter: { bioguideId: v.bioguideId, billSlug: result.billSlug, congress: result.congress },
+            update: { $set: { vote: v.vote, chamber: "Senate", fetchedAt: new Date() } },
+            upsert: true,
+          },
+        }));
+        await MemberVote.bulkWrite(bulkOps);
+        totalVotesStored += bulkOps.length;
+        totalRollCalls++;
+
+        if (result.title) billTitles.set(result.billSlug, result.title);
+
+        if (totalRollCalls % 10 === 0) {
+          console.log(`  Senate session ${session}, vote #${voteNum}: ${result.billSlug} (${result.votes.length} members)`);
+        }
+      }
+
+      voteNum++;
+      await delay(150);
     }
+    console.log(`  Senate session ${session}: scanned ${voteNum - 1} votes`);
   }
 
-  console.log(`\nFound ${uniqueRollCalls.size} unique roll call votes across ${rollCalls.length} bill-vote pairs`);
+  // --- HOUSE VOTES ---
+  console.log("\n=== Fetching House roll call votes ===");
+  for (const year of [2025, 2026]) {
+    let rollNum = 1;
+    let consecutive404s = 0;
 
-  // Also store bill titles so the voting record page can display them
-  const billTitles = new Map<string, { title: string; congress: string }>();
-  for (const rv of uniqueRollCalls.values()) {
-    if (rv.billTitle && !billTitles.has(rv.billSlug)) {
-      billTitles.set(rv.billSlug, { title: rv.billTitle, congress: rv.congress });
+    while (consecutive404s < 5) {
+      const result = await parseHouseVote(year, rollNum);
+
+      if (!result) {
+        consecutive404s++;
+        rollNum++;
+        continue;
+      }
+      consecutive404s = 0;
+
+      if (result.votes.length > 0) {
+        const bulkOps = result.votes.map((v) => ({
+          updateOne: {
+            filter: { bioguideId: v.bioguideId, billSlug: result.billSlug, congress: result.congress },
+            update: { $set: { vote: v.vote, chamber: "House", fetchedAt: new Date() } },
+            upsert: true,
+          },
+        }));
+        await MemberVote.bulkWrite(bulkOps);
+        totalVotesStored += bulkOps.length;
+        totalRollCalls++;
+
+        if (result.title) billTitles.set(result.billSlug, result.title);
+
+        if (totalRollCalls % 10 === 0) {
+          console.log(`  House ${year}, roll #${rollNum}: ${result.billSlug} (${result.votes.length} members)`);
+        }
+      }
+
+      rollNum++;
+      await delay(150);
     }
+    console.log(`  House ${year}: scanned ${rollNum - 1} rolls`);
   }
 
-  // Upsert bills (only set title, don't overwrite community vote data)
-  const billBulkOps = [...billTitles.entries()].map(([slug, info]) => ({
-    updateOne: {
-      filter: { billSlug: slug },
-      update: {
-        $setOnInsert: {
-          title: info.title,
-          congress: info.congress,
-          image: "/imgs/wtp.png",
-          cloudinaryId: "",
-          givenSummary: "",
-          yeas: 0,
-          nays: 0,
+  // Store bill titles so voting record pages can display them
+  if (billTitles.size > 0) {
+    const billOps = [...billTitles.entries()].map(([slug, title]) => ({
+      updateOne: {
+        filter: { billSlug: slug },
+        update: {
+          $setOnInsert: {
+            title,
+            congress: "119",
+            image: "/imgs/wtp.png",
+            cloudinaryId: "",
+            givenSummary: "",
+            yeas: 0,
+            nays: 0,
+          },
         },
+        upsert: true,
       },
-      upsert: true,
-    },
-  }));
-
-  if (billBulkOps.length > 0) {
-    const billResult = await Bill.bulkWrite(billBulkOps);
-    console.log(`Bills: ${billResult.upsertedCount} new, ${billResult.modifiedCount} existing`);
+    }));
+    const billResult = await Bill.bulkWrite(billOps);
+    console.log(`\nBills: ${billResult.upsertedCount} new titles stored`);
   }
 
-  let totalVotes = 0;
-  let processed = 0;
-  const total = uniqueRollCalls.size;
-
-  for (const rv of uniqueRollCalls.values()) {
-    processed++;
-    if (processed % 10 === 0 || processed === total) {
-      console.log(`Processing roll call ${processed}/${total}...`);
-    }
-
-    const count = await parseAndStoreRollCall(rv);
-    totalVotes += count;
-
-    await delay(200); // Rate limit XML fetches
-  }
-
-  console.log(`\nSeeded ${totalVotes} member vote records`);
+  console.log(`\n=== Summary ===`);
+  console.log(`Roll call votes processed: ${totalRollCalls}`);
+  console.log(`Member vote records stored: ${totalVotesStored}`);
 
   const uniqueMembers = await MemberVote.distinct("bioguideId");
-  console.log(`Covering ${uniqueMembers.length} unique members`);
+  console.log(`Unique members with votes: ${uniqueMembers.length}`);
+
+  const uniqueBills = await MemberVote.distinct("billSlug");
+  console.log(`Unique bills with votes: ${uniqueBills.length}`);
 
   await mongoose.disconnect();
-  console.log("Done!");
+  console.log("\nDone!");
 }
 
 main().catch((err) => {
