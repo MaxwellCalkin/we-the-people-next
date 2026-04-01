@@ -3,12 +3,29 @@
  * Run with: npx tsx scripts/seed-member-scores.ts
  */
 import mongoose from "mongoose";
-import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+// Load .env.local manually (no dotenv dependency needed)
+const envPath = resolve(process.cwd(), ".env.local");
+try {
+  const envContent = readFileSync(envPath, "utf-8");
+  for (const line of envContent.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+    if (!process.env[key]) process.env[key] = val;
+  }
+} catch {
+  console.error("Could not read .env.local");
+}
 
 const CONGRESS_API = "https://api.congress.gov/v3";
 const API_KEY = process.env.CONGRESS_KEY;
-const MONGO_URI = process.env.MONGODB_URI || process.env.DATABASE_URL;
+const MONGO_URI = process.env.DB_STRING;
 
 const MemberScoreSchema = new mongoose.Schema({
   bioguideId: { type: String, required: true, unique: true },
@@ -66,7 +83,7 @@ async function fetchAllMembers(): Promise<
 
 async function main() {
   if (!MONGO_URI) {
-    console.error("No MONGODB_URI or DATABASE_URL found in .env.local");
+    console.error("No DB_STRING found in .env.local");
     process.exit(1);
   }
 
