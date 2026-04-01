@@ -147,7 +147,7 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
             {detail.sponsoredBills
               .filter((b) => b.title)
               .map((b) => (
-              <Link key={`${b.billSlug}-${b.congress}`} href={`/vote/${b.billSlug}/${b.congress}`}>
+              <Link key={`${b.billSlug}-${b.congress}`} href={`/vote/${b.billSlug}/${b.congress}`} className="block">
                 <GlassCard hover>
                   <p className="text-cream text-sm font-medium hover:text-gold transition-colors">
                     {b.billSlug.toUpperCase()} — {b.title}

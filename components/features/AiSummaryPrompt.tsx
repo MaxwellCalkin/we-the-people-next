@@ -74,21 +74,29 @@ export default function AiSummaryPrompt({
             breakdown of the bill, including any hidden provisions or gotchas.
           </p>
 
-          <div className="relative">
-            <pre className="bg-black/30 border border-glass-border rounded-md p-3 pr-12 text-cream/80 text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+          <div>
+            <div className="flex justify-end mb-1">
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-glass-border/50 hover:bg-glass-border transition-colors text-xs"
+                title="Copy prompt"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-400" />
+                    <span className="text-green-400">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5 text-cream/60" />
+                    <span className="text-cream/60">Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <pre className="bg-black/30 border border-glass-border rounded-md p-3 text-cream/80 text-xs leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
               {prompt}
             </pre>
-            <button
-              onClick={handleCopy}
-              className="absolute top-2 right-2 p-1.5 rounded-md bg-glass-border/50 hover:bg-glass-border transition-colors"
-              title="Copy prompt"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-400" />
-              ) : (
-                <Copy className="h-3.5 w-3.5 text-cream/60" />
-              )}
-            </button>
           </div>
 
           <div className="flex items-center gap-3 text-xs">
