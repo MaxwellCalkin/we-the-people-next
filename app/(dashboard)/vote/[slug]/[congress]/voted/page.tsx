@@ -11,6 +11,7 @@ import {
   parseBillSlug,
 } from "@/lib/congress";
 import User from "@/models/User";
+import Bill from "@/models/Bill";
 import Post from "@/models/Post";
 import GlassCard from "@/components/ui/GlassCard";
 import VoteStats from "@/components/features/VoteStats";
@@ -80,13 +81,12 @@ export default async function VotedPage({ params }: VotedPageProps) {
     }
   }
 
-  // Get Heard community vote counts
-  const yeasCount = await User.countDocuments({
-    yeaBillSlugs: bill.bill_slug,
-  });
-  const naysCount = await User.countDocuments({
-    nayBillSlugs: bill.bill_slug,
-  });
+  // Get Heard community vote counts from the Bill document
+  const billDoc = await Bill.findOne({ billSlug: bill.bill_slug })
+    .select("yeas nays")
+    .lean();
+  const yeasCount = billDoc?.yeas ?? 0;
+  const naysCount = billDoc?.nays ?? 0;
   const yeasByDistrict = await User.countDocuments({
     yeaBillSlugs: bill.bill_slug,
     state: userState,
