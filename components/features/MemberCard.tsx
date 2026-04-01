@@ -39,9 +39,7 @@ export default function MemberCard({
 
   return (
     <div
-      className={`glass-card glass-hover flex items-center gap-3 sm:gap-4 py-3 px-4 ${
-        isNA ? "opacity-50" : ""
-      }`}
+      className="glass-card glass-hover flex items-center gap-3 sm:gap-4 py-3 px-4"
     >
       <span
         className={`font-bold text-sm w-8 text-center shrink-0 ${
