@@ -6,8 +6,8 @@ interface VoteEntry {
   congress: string;
   title: string;
   memberVote: string;
-  communityPosition: string;
-  matches: boolean;
+  communityPosition?: string | null;
+  matches?: boolean | null;
 }
 
 interface MemberVoteListProps {
@@ -21,7 +21,7 @@ export default function MemberVoteList({ votes, showAll, bioguideId }: MemberVot
     <div className="space-y-2">
       {votes.length === 0 ? (
         <p className="text-cream/40 text-sm">
-          No voting overlap with community bills yet.
+          No votes recorded yet.
         </p>
       ) : (
         votes.map((v) => (
@@ -49,12 +49,18 @@ export default function MemberVoteList({ votes, showAll, bioguideId }: MemberVot
               >
                 {v.memberVote}
               </span>
-              <span className="text-cream/25 text-xs">
-                Community: {v.communityPosition}
-              </span>
-              <span className={`text-sm ${v.matches ? "text-emerald-400" : "text-red-400"}`}>
-                {v.matches ? "✓" : "✗"}
-              </span>
+              {v.communityPosition ? (
+                <>
+                  <span className="text-cream/25 text-xs">
+                    Community: {v.communityPosition}
+                  </span>
+                  <span className={`text-sm ${v.matches ? "text-emerald-400" : "text-red-400"}`}>
+                    {v.matches ? "✓" : "✗"}
+                  </span>
+                </>
+              ) : (
+                <span className="text-cream/15 text-xs">No community vote</span>
+              )}
             </div>
           </div>
         ))
