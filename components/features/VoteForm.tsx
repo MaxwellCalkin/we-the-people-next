@@ -30,8 +30,11 @@ export default function VoteForm({
       });
 
       if (res.ok) {
-        router.push(`/vote/${billSlug}/${congress}/voted`);
+        // refresh() invalidates the client cache so the server component
+        // on the /voted page fetches fresh data (user now has the vote recorded).
+        // replace() prevents the back button returning to the vote form.
         router.refresh();
+        router.replace(`/vote/${billSlug}/${congress}/voted`);
       } else {
         const data = await res.json();
         console.error("Vote failed:", data.error);
