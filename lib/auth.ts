@@ -89,7 +89,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: "/login",
   },
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
         await connectDB();
         const existingUser = await User.findOne({ email: user.email });
@@ -98,7 +98,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             email: user.email!,
             userName: user.name ?? user.email!,
             provider: "google",
+            avatar: (profile as { picture?: string })?.picture || null,
           });
+        } else if (!existingUser.avatar && (profile as { picture?: string })?.picture) {
+          existingUser.avatar = (profile as { picture?: string }).picture!;
+          await existingUser.save();
         }
       }
       return true;
