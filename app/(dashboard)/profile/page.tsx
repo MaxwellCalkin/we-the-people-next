@@ -1,3 +1,4 @@
+// app/(dashboard)/profile/page.tsx
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
@@ -5,6 +6,7 @@ import User from "@/models/User";
 import Post from "@/models/Post";
 import Bill from "@/models/Bill";
 import { fetchMembers } from "@/lib/congress";
+import { computePersonalAlignment } from "@/lib/member-votes";
 import ProfileHeader from "@/components/features/ProfileHeader";
 import ProfileTabs from "@/components/features/ProfileTabs";
 
@@ -20,7 +22,6 @@ export default async function ProfilePage() {
   const userState = user.state;
   const userCd = user.cd;
 
-  // Redirect to onboarding if district not set
   if (!userState || !userCd) redirect("/onboarding");
 
   // Fetch House rep and senators
@@ -31,6 +32,30 @@ export default async function ProfilePage() {
   );
 
   const houseRep = houseReps.length > 0 ? houseReps[0] : null;
+
+  // Build rep cards with alignment scores — Senator | Senator | House Rep
+  const allReps = [
+    ...senators.slice(0, 2).map((s) => ({ ...s, role: "Senator" })),
+    ...(houseRep ? [{ ...houseRep, role: "House Rep" }] : []),
+  ];
+
+  const reps = await Promise.all(
+    allReps.map(async (rep) => {
+      const alignment = await computePersonalAlignment(
+        rep.id,
+        user.yeaBillSlugs || [],
+        user.nayBillSlugs || []
+      );
+      return {
+        id: rep.id,
+        name: rep.name,
+        party: rep.party,
+        role: rep.role,
+        imageUrl: `https://www.congress.gov/img/member/${rep.id.toLowerCase()}_200.jpg`,
+        alignment,
+      };
+    })
+  );
 
   // Fetch user's posts
   const posts = await Post.find({ user: session.user.id })
@@ -85,9 +110,9 @@ export default async function ProfilePage() {
           userName: user.userName,
           state: userState,
           cd: userCd,
+          avatar: user.avatar || null,
         }}
-        houseRep={houseRep}
-        senators={senators.slice(0, 2)}
+        reps={reps}
       />
 
       <ProfileTabs votes={votes} posts={serializedPosts} />
