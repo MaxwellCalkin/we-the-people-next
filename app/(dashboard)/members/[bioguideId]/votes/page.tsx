@@ -1,6 +1,8 @@
 // app/(dashboard)/members/[bioguideId]/votes/page.tsx
 import { notFound } from "next/navigation";
+import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
+import User from "@/models/User";
 import MemberVote from "@/models/MemberVote";
 import Bill from "@/models/Bill";
 import { fetchMemberDetail } from "@/lib/congress";
@@ -60,6 +62,21 @@ export default async function MemberVotesPage({ params }: VotesPageProps) {
   // Sort: community bills first (by popularity desc), then non-community bills
   votes.sort((a, b) => b.popularity - a.popularity);
 
+  // Get user's voted slugs for correct bill links
+  const session = await auth();
+  let userVotedSlugs: string[] = [];
+  if (session?.user?.id) {
+    const user = await User.findById(session.user.id)
+      .select("yeaBillSlugs nayBillSlugs")
+      .lean();
+    if (user) {
+      userVotedSlugs = [
+        ...(user.yeaBillSlugs || []),
+        ...(user.nayBillSlugs || []),
+      ];
+    }
+  }
+
   const prefix = detail.chamber === "Senate" ? "Sen." : "Rep.";
   const communityCount = votes.filter((v) => v.communityPosition).length;
 
@@ -78,7 +95,7 @@ export default async function MemberVotesPage({ params }: VotesPageProps) {
         {votes.length} vote{votes.length !== 1 ? "s" : ""} recorded
         {communityCount > 0 && ` · ${communityCount} on community bills`}
       </p>
-      <MemberVoteList votes={votes} showAll />
+      <MemberVoteList votes={votes} showAll userVotedSlugs={userVotedSlugs} />
     </div>
   );
 }

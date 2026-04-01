@@ -14,9 +14,10 @@ interface MemberVoteListProps {
   votes: VoteEntry[];
   showAll?: boolean;
   bioguideId?: string;
+  userVotedSlugs?: string[];
 }
 
-export default function MemberVoteList({ votes, showAll, bioguideId }: MemberVoteListProps) {
+export default function MemberVoteList({ votes, showAll, bioguideId, userVotedSlugs = [] }: MemberVoteListProps) {
   return (
     <div className="space-y-2">
       {votes.length === 0 ? (
@@ -24,46 +25,49 @@ export default function MemberVoteList({ votes, showAll, bioguideId }: MemberVot
           No votes recorded yet.
         </p>
       ) : (
-        votes.map((v) => (
-          <div
-            key={`${v.billSlug}-${v.congress}`}
-            className="glass-card flex items-center justify-between py-3 px-4"
-          >
-            <div className="flex-1 min-w-0">
-              <Link
-                href={`/vote/${v.billSlug}/${v.congress}/voted`}
-                className="text-cream text-sm font-medium hover:text-gold transition-colors line-clamp-1"
-              >
-                {v.title}
-              </Link>
+        votes.map((v) => {
+          const userVoted = userVotedSlugs.includes(v.billSlug);
+          return (
+            <div
+              key={`${v.billSlug}-${v.congress}`}
+              className="glass-card flex items-center justify-between py-3 px-4"
+            >
+              <div className="flex-1 min-w-0">
+                <Link
+                  href={userVoted ? `/vote/${v.billSlug}/${v.congress}/voted` : `/vote/${v.billSlug}/${v.congress}`}
+                  className="text-cream text-sm font-medium hover:text-gold transition-colors line-clamp-1"
+                >
+                  {v.title}
+                </Link>
+              </div>
+              <div className="flex items-center gap-3 shrink-0 ml-4">
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                    v.memberVote === "Yea"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : v.memberVote === "Nay"
+                      ? "bg-red-500/15 text-red-400"
+                      : "bg-cream/10 text-cream/50"
+                  }`}
+                >
+                  {v.memberVote}
+                </span>
+                {v.communityPosition ? (
+                  <>
+                    <span className="text-cream/25 text-xs">
+                      Community: {v.communityPosition}
+                    </span>
+                    <span className={`text-sm ${v.matches ? "text-emerald-400" : "text-red-400"}`}>
+                      {v.matches ? "✓" : "✗"}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-cream/15 text-xs">No community vote</span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0 ml-4">
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                  v.memberVote === "Yea"
-                    ? "bg-emerald-500/15 text-emerald-400"
-                    : v.memberVote === "Nay"
-                    ? "bg-red-500/15 text-red-400"
-                    : "bg-cream/10 text-cream/50"
-                }`}
-              >
-                {v.memberVote}
-              </span>
-              {v.communityPosition ? (
-                <>
-                  <span className="text-cream/25 text-xs">
-                    Community: {v.communityPosition}
-                  </span>
-                  <span className={`text-sm ${v.matches ? "text-emerald-400" : "text-red-400"}`}>
-                    {v.matches ? "✓" : "✗"}
-                  </span>
-                </>
-              ) : (
-                <span className="text-cream/15 text-xs">No community vote</span>
-              )}
-            </div>
-          </div>
-        ))
+          );
+        })
       )}
       {!showAll && bioguideId && (
         <Link

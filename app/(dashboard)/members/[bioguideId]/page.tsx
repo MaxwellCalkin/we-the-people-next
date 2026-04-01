@@ -31,11 +31,16 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
 
   const session = await auth();
   let personalAlignment = { score: null as number | null, matching: 0, total: 0 };
+  let userVotedSlugs: string[] = [];
   if (session?.user?.id) {
     const user = await User.findById(session.user.id)
       .select("yeaBillSlugs nayBillSlugs")
       .lean();
     if (user) {
+      userVotedSlugs = [
+        ...(user.yeaBillSlugs || []),
+        ...(user.nayBillSlugs || []),
+      ];
       personalAlignment = await computePersonalAlignment(
         bioguideId,
         user.yeaBillSlugs || [],
@@ -169,6 +174,7 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         <MemberVoteList
           votes={trendingVotes}
           bioguideId={bioguideId}
+          userVotedSlugs={userVotedSlugs}
         />
       </div>
     </div>
