@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import connectDB from "@/lib/db";
 import Post from "@/models/Post";
 import PostCard from "@/components/features/PostCard";

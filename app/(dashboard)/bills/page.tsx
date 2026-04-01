@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import { searchBills } from "@/lib/congress";

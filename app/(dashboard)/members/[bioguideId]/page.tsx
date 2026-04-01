@@ -1,4 +1,6 @@
 // app/(dashboard)/members/[bioguideId]/page.tsx
+export const dynamic = "force-dynamic";
+
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";

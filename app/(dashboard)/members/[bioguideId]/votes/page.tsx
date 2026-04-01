@@ -1,4 +1,6 @@
 // app/(dashboard)/members/[bioguideId]/votes/page.tsx
+export const dynamic = "force-dynamic";
+
 import { notFound } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";

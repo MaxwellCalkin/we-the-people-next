@@ -1,4 +1,6 @@
 // app/(dashboard)/profile/page.tsx
+export const dynamic = "force-dynamic";
+
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
