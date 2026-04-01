@@ -1,5 +1,6 @@
 // app/(dashboard)/members/[bioguideId]/page.tsx
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
@@ -132,34 +133,27 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         </div>
       )}
 
-      {detail.sponsoredBills.length > 0 && (
+      {detail.sponsoredBills.filter((b) => b.title).length > 0 && (
         <div>
           <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-3">
             Recently Sponsored Bills
           </h2>
           <div className="space-y-2">
-            {detail.sponsoredBills.map((b) => (
-              <GlassCard key={`${b.billSlug}-${b.congress}`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-cream text-sm font-medium">
-                      {b.billSlug.toUpperCase()} — {b.title}
+            {detail.sponsoredBills
+              .filter((b) => b.title)
+              .map((b) => (
+              <Link key={`${b.billSlug}-${b.congress}`} href={`/vote/${b.billSlug}/${b.congress}`}>
+                <GlassCard hover>
+                  <p className="text-cream text-sm font-medium hover:text-gold transition-colors">
+                    {b.billSlug.toUpperCase()} — {b.title}
+                  </p>
+                  {b.introducedDate && (
+                    <p className="text-cream/35 text-xs mt-0.5">
+                      Introduced {b.introducedDate}
                     </p>
-                    {b.introducedDate && (
-                      <p className="text-cream/35 text-xs mt-0.5">
-                        Introduced {b.introducedDate}
-                      </p>
-                    )}
-                  </div>
-                  {b.latestAction && (
-                    <span className="text-cream/30 text-xs shrink-0 ml-4">
-                      {b.latestAction.length > 50
-                        ? b.latestAction.slice(0, 50) + "…"
-                        : b.latestAction}
-                    </span>
                   )}
-                </div>
-              </GlassCard>
+                </GlassCard>
+              </Link>
             ))}
           </div>
         </div>
