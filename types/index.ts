@@ -31,3 +31,47 @@ export type VotePosition =
   | "Not Voting"
   | "Present"
   | string;
+
+export interface IMemberVote {
+  bioguideId: string;
+  billSlug: string;
+  congress: string;
+  vote: string;
+  chamber: string;
+  fetchedAt: Date;
+}
+
+export interface IMemberScore {
+  bioguideId: string;
+  name: string;
+  party: string;
+  state: string;
+  district: number | null;
+  chamber: string;
+  communityScore: number | null;
+  matchingVotes: number;
+  totalCompared: number;
+  updatedAt: Date;
+}
+
+export interface IBillVoteEvent {
+  billSlug: string;
+  congress: string;
+  votedAt: Date;
+}
+
+export interface MemberDetail {
+  bioguideId: string;
+  name: string;
+  party: string;
+  state: string;
+  district?: number;
+  chamber: string;
+  imageUrl: string;
+  website?: string;
+  phone?: string;
+  leadership?: string;
+  terms: { congress: number; chamber: string; startYear: number; endYear?: number }[];
+  committees: { name: string }[];
+  sponsoredBills: { billSlug: string; congress: string; title: string; introducedDate: string; latestAction: string }[];
+}
