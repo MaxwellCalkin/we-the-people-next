@@ -81,22 +81,31 @@ export default async function VotedPage({ params }: VotedPageProps) {
     }
   }
 
-  // Get Heard community vote counts from the Bill document
-  const billDoc = await Bill.findOne({ billSlug: bill.bill_slug })
-    .select("yeas nays")
-    .lean();
-  const yeasCount = billDoc?.yeas ?? 0;
-  const naysCount = billDoc?.nays ?? 0;
-  const yeasByDistrict = await User.countDocuments({
-    yeaBillSlugs: bill.bill_slug,
-    state: userState,
-    cd: userCd,
-  });
-  const naysByDistrict = await User.countDocuments({
-    nayBillSlugs: bill.bill_slug,
-    state: userState,
-    cd: userCd,
-  });
+  // Get Heard community vote counts using native MongoDB driver
+  // (Mongoose model queries were returning 0 in Vercel page server components)
+  const db = (await connectDB())?.connection?.db;
+  let yeasCount = 0;
+  let naysCount = 0;
+  let yeasByDistrict = 0;
+  let naysByDistrict = 0;
+
+  if (db) {
+    const billsCol = db.collection("bills");
+    const usersCol = db.collection("users");
+    const billDoc = await billsCol.findOne({ billSlug: bill.bill_slug });
+    yeasCount = billDoc?.yeas ?? 0;
+    naysCount = billDoc?.nays ?? 0;
+    yeasByDistrict = await usersCol.countDocuments({
+      yeaBillSlugs: bill.bill_slug,
+      state: userState,
+      cd: userCd,
+    });
+    naysByDistrict = await usersCol.countDocuments({
+      nayBillSlugs: bill.bill_slug,
+      state: userState,
+      cd: userCd,
+    });
+  }
 
   // Check if user has a post for this bill
   const existingPost = await Post.findOne({
