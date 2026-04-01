@@ -62,6 +62,35 @@ const BillSchema = new mongoose.Schema({
 });
 const Bill = mongoose.models.Bill || mongoose.model("Bill", BillSchema);
 
+const MemberScoreSchema = new mongoose.Schema({
+  bioguideId: { type: String, required: true, unique: true },
+  name: String,
+  party: String,
+  state: String,
+  district: { type: Number, default: null },
+  chamber: String,
+  communityScore: { type: Number, default: null },
+  matchingVotes: { type: Number, default: 0 },
+  totalCompared: { type: Number, default: 0 },
+  updatedAt: { type: Date, default: Date.now },
+});
+const MemberScoreModel =
+  mongoose.models.MemberScore ||
+  mongoose.model("MemberScore", MemberScoreSchema);
+
+// Map senator last names to bioguide IDs (built from MemberScore collection)
+let senatorNameMap: Map<string, string> = new Map();
+
+async function buildSenatorNameMap(): Promise<void> {
+  const senators = await MemberScoreModel.find({ chamber: "Senate" }).lean();
+  for (const s of senators as { bioguideId: string; name: string }[]) {
+    // name is like "Gillibrand, Kirsten E." — extract last name
+    const lastName = s.name.split(",")[0].trim().toLowerCase();
+    senatorNameMap.set(lastName, s.bioguideId);
+  }
+  console.log(`Built senator name map: ${senatorNameMap.size} senators`);
+}
+
 function normalizeVote(vote: string): string {
   if (vote === "Aye") return "Yea";
   if (vote === "No") return "Nay";
@@ -122,15 +151,22 @@ async function parseSenateVote(
 
     if (!billSlug) return null; // Skip non-bill votes (nominations, etc.)
 
-    // Extract member votes
+    // Extract member votes — Senate uses <member_full> and <lis_member_id>, not bioguide
+    // Match by last name from <member_full> e.g. "Gillibrand (D-NY)"
     const votes: { bioguideId: string; vote: string }[] = [];
-    const memberRegex = /<member>[\s\S]*?<bioguide_id>([^<]+)<\/bioguide_id>[\s\S]*?<vote_cast>([^<]+)<\/vote_cast>[\s\S]*?<\/member>/gi;
+    const memberRegex = /<member>[\s\S]*?<member_full>([^<]+)<\/member_full>[\s\S]*?<vote_cast>([^<]+)<\/vote_cast>[\s\S]*?<\/member>/gi;
     let match;
     while ((match = memberRegex.exec(xml)) !== null) {
-      votes.push({
-        bioguideId: match[1].trim(),
-        vote: normalizeVote(match[2].trim()),
-      });
+      const fullName = match[1].trim();
+      // Extract last name: "Gillibrand (D-NY)" -> "gillibrand"
+      const lastName = fullName.split(/\s*\(/)[0].trim().toLowerCase();
+      const bioguideId = senatorNameMap.get(lastName);
+      if (bioguideId) {
+        votes.push({
+          bioguideId,
+          vote: normalizeVote(match[2].trim()),
+        });
+      }
     }
 
     return { billSlug, congress, title, votes };
@@ -202,6 +238,8 @@ async function main() {
 
   await mongoose.connect(MONGO_URI);
   console.log("Connected to MongoDB\n");
+
+  await buildSenatorNameMap();
 
   let totalVotesStored = 0;
   let totalRollCalls = 0;

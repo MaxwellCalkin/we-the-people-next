@@ -4,7 +4,6 @@ import connectDB from "@/lib/db";
 import MemberVote from "@/models/MemberVote";
 import Bill from "@/models/Bill";
 import { fetchMemberDetail } from "@/lib/congress";
-import { fetchBillDetails, getCurrentCongress } from "@/lib/congress";
 import MemberVoteList from "@/components/features/MemberVoteList";
 import Link from "next/link";
 
@@ -25,39 +24,36 @@ export default async function MemberVotesPage({ params }: VotesPageProps) {
     .sort({ fetchedAt: -1 })
     .lean();
 
-  // Get community bills for priority sorting and community position
-  const communityBills = await Bill.find({
-    $or: [{ yeas: { $gt: 0 } }, { nays: { $gt: 0 } }],
-  })
+  // Get all member's bill slugs to look up titles
+  const memberBillSlugs = allMemberVotes.map((mv) => mv.billSlug);
+
+  // Fetch ALL bills that this member voted on (for titles) + community bills (for scores)
+  const allBills = await Bill.find({ billSlug: { $in: memberBillSlugs } })
     .select("billSlug title yeas nays")
     .lean();
 
-  const communityBillMap = new Map(
-    communityBills.map((b) => [b.billSlug, b])
-  );
-  // Total community votes for sorting priority
-  const communityPopularity = new Map(
-    communityBills.map((b) => [b.billSlug, b.yeas + b.nays])
-  );
+  const billMap = new Map(allBills.map((b) => [b.billSlug, b]));
 
-  // Build vote entries, resolving titles from Bill collection or billSlug
+  // Build vote entries
   const votes = allMemberVotes
     .filter((mv) => mv.vote === "Yea" || mv.vote === "Nay")
     .map((mv) => {
-      const communityBill = communityBillMap.get(mv.billSlug);
-      const communityPosition = communityBill
-        ? communityBill.yeas >= communityBill.nays ? "Yea" : "Nay"
+      const bill = billMap.get(mv.billSlug);
+      const hasCommunityVotes = bill && (bill.yeas > 0 || bill.nays > 0);
+      const communityPosition = hasCommunityVotes
+        ? bill.yeas >= bill.nays ? "Yea" : "Nay"
         : null;
       const matches = communityPosition ? mv.vote === communityPosition : null;
+      const popularity = hasCommunityVotes ? bill.yeas + bill.nays : 0;
 
       return {
         billSlug: mv.billSlug,
         congress: mv.congress,
-        title: communityBill?.title || mv.billSlug.toUpperCase(),
+        title: bill?.title || mv.billSlug.toUpperCase(),
         memberVote: mv.vote,
         communityPosition,
         matches,
-        popularity: communityPopularity.get(mv.billSlug) || 0,
+        popularity,
       };
     });
 
