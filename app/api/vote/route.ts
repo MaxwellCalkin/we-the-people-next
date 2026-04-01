@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
 import Bill from "@/models/Bill";
+import BillVoteEvent from "@/models/BillVoteEvent";
+import { cacheVotesAndRecomputeScores } from "@/lib/member-votes";
 
 export async function POST(request: Request) {
   try {
@@ -62,6 +64,14 @@ export async function POST(request: Request) {
     } else {
       await Bill.findOneAndUpdate({ billSlug }, { $inc: { [voteField]: 1 } });
     }
+
+    // Create vote event for trending/top calculations
+    await BillVoteEvent.create({ billSlug, congress, votedAt: new Date() });
+
+    // Async: cache member votes and recompute alignment scores (non-blocking)
+    cacheVotesAndRecomputeScores(billSlug, congress).catch((err) =>
+      console.log("Async vote caching error:", err instanceof Error ? err.message : err)
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {
