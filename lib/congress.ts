@@ -472,3 +472,101 @@ export async function getMemberVoteOnBill(
     return "Has Not Voted On This Bill";
   }
 }
+
+/**
+ * Fetch full member detail from Congress.gov by bioguide ID.
+ * Includes terms, committees, sponsored legislation, and contact info.
+ */
+export async function fetchMemberDetail(
+  bioguideId: string
+): Promise<import("@/types").MemberDetail | null> {
+  const url = `${CONGRESS_API}/member/${bioguideId}?api_key=${process.env.CONGRESS_KEY}&format=json`;
+  const resp = await fetch(url);
+  if (!resp.ok) return null;
+  const data = await resp.json();
+  const m = data.member;
+  if (!m) return null;
+
+  const terms: { congress: number; chamber: string; startYear: number; endYear?: number }[] = [];
+  let chamber = "";
+  let state = "";
+  let district: number | undefined;
+  let leadership: string | undefined;
+
+  if (m.terms) {
+    for (const t of m.terms) {
+      terms.push({
+        congress: t.congress || 0,
+        chamber: t.chamber === "Senate" ? "Senate" : "House",
+        startYear: t.startYear || 0,
+        endYear: t.endYear,
+      });
+    }
+    const current = terms[terms.length - 1];
+    if (current) {
+      chamber = current.chamber;
+    }
+  }
+
+  state = m.state || "";
+  district = m.district;
+
+  if (m.leadership && m.leadership.length > 0) {
+    const current = m.leadership.find((l: { current?: boolean }) => l.current);
+    if (current) {
+      leadership = current.type;
+    }
+  }
+
+  const committees: { name: string }[] = [];
+  try {
+    const comUrl = `${CONGRESS_API}/member/${bioguideId}/committees?api_key=${process.env.CONGRESS_KEY}&format=json`;
+    const comResp = await fetch(comUrl);
+    if (comResp.ok) {
+      const comData = await comResp.json();
+      for (const c of comData.committees || []) {
+        committees.push({ name: c.name || c.committeeName || "" });
+      }
+    }
+  } catch (e) {
+    console.log("Error fetching committees:", e instanceof Error ? e.message : e);
+  }
+
+  const sponsoredBills: { billSlug: string; congress: string; title: string; introducedDate: string; latestAction: string }[] = [];
+  try {
+    const spUrl = `${CONGRESS_API}/member/${bioguideId}/sponsored-legislation?limit=5&sort=updateDate+desc&api_key=${process.env.CONGRESS_KEY}&format=json`;
+    const spResp = await fetch(spUrl);
+    if (spResp.ok) {
+      const spData = await spResp.json();
+      for (const b of spData.sponsoredLegislation || []) {
+        const bType = (b.type || "hr").toLowerCase();
+        const bNumber = String(b.number || "");
+        sponsoredBills.push({
+          billSlug: `${bType}${bNumber}`,
+          congress: String(b.congress || ""),
+          title: b.title || "",
+          introducedDate: b.introducedDate || "",
+          latestAction: b.latestAction?.text || "",
+        });
+      }
+    }
+  } catch (e) {
+    console.log("Error fetching sponsored legislation:", e instanceof Error ? e.message : e);
+  }
+
+  return {
+    bioguideId: m.bioguideId || bioguideId,
+    name: m.directOrderName || m.invertedOrderName || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
+    party: m.partyName || "",
+    state,
+    district,
+    chamber,
+    imageUrl: `https://www.congress.gov/img/member/${bioguideId.toLowerCase()}_200.jpg`,
+    website: m.officialWebsiteUrl || m.url,
+    phone: m.addressInformation?.officePhone,
+    leadership,
+    terms,
+    committees,
+    sponsoredBills,
+  };
+}
