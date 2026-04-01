@@ -31,6 +31,7 @@ export default function VoteForm({
 
       if (res.ok) {
         router.push(`/vote/${billSlug}/${congress}/voted`);
+        router.refresh();
       } else {
         const data = await res.json();
         console.error("Vote failed:", data.error);
