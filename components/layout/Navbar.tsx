@@ -1,14 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { Menu, X, LogOut } from "lucide-react";
+import { Menu, X, LogOut, User } from "lucide-react";
 import SearchBar from "@/components/ui/SearchBar";
+import Avatar from "@/components/ui/Avatar";
 
-export default function Navbar() {
+interface NavbarProps {
+  userName?: string;
+  userImage?: string | null;
+}
+
+export default function Navbar({ userName, userImage }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,8 +26,20 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        avatarMenuRef.current &&
+        !avatarMenuRef.current.contains(e.target as Node)
+      ) {
+        setAvatarMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const navLinks = [
-    { href: "/profile", label: "Profile" },
     { href: "/bills", label: "Bills" },
     { href: "/members", label: "Members" },
     { href: "/how-it-works", label: "How It Works" },
@@ -30,9 +50,7 @@ export default function Navbar() {
     <>
       <nav
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? "glass-dark shadow-lg"
-            : "bg-transparent"
+          scrolled ? "glass-dark-flat shadow-lg" : "bg-transparent"
         }`}
       >
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -58,16 +76,45 @@ export default function Navbar() {
               ))}
             </div>
 
-            {/* Search + Logout (Desktop) */}
+            {/* Search + Avatar Menu (Desktop) */}
             <div className="hidden md:flex items-center gap-4">
               <SearchBar className="w-52" />
-              <button
-                onClick={() => signOut({ callbackUrl: "/" })}
-                className="flex items-center gap-1.5 text-sm text-cream/70 hover:text-red-accent transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </button>
+
+              {/* Avatar dropdown */}
+              <div className="relative" ref={avatarMenuRef}>
+                <button
+                  onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+                  className="rounded-full ring-2 ring-transparent hover:ring-gold/50 transition-all"
+                  aria-label="User menu"
+                >
+                  <Avatar
+                    src={userImage}
+                    name={userName || "U"}
+                    size={32}
+                  />
+                </button>
+
+                {avatarMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 rounded-lg bg-navy-800 border border-white/10 shadow-xl py-1 z-50">
+                    <Link
+                      href="/profile"
+                      onClick={() => setAvatarMenuOpen(false)}
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-cream/80 hover:text-gold hover:bg-white/5 transition-colors"
+                    >
+                      <User className="h-4 w-4" />
+                      Profile
+                    </Link>
+                    <div className="border-t border-white/10 my-1" />
+                    <button
+                      onClick={() => signOut({ callbackUrl: "/" })}
+                      className="flex items-center gap-2 w-full px-4 py-2 text-sm text-cream/70 hover:text-red-accent hover:bg-white/5 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Mobile Hamburger */}
@@ -119,6 +166,13 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                href="/profile"
+                onClick={() => setMobileOpen(false)}
+                className="text-cream/80 hover:text-gold transition-colors text-lg"
+              >
+                Profile
+              </Link>
             </div>
 
             <button
