@@ -54,9 +54,12 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
   let tenureYears = 0;
   let tenureDetail = "";
   if (detail.terms.length > 0) {
-    const firstTerm = detail.terms[0];
-    tenureYears = new Date().getFullYear() - firstTerm.startYear;
-    tenureDetail = `${firstTerm.chamber} since ${firstTerm.startYear}`;
+    const currentTerm = detail.terms[detail.terms.length - 1];
+    const firstTermInChamber = detail.terms.find(
+      (t) => t.chamber === currentTerm.chamber
+    ) || currentTerm;
+    tenureYears = new Date().getFullYear() - firstTermInChamber.startYear;
+    tenureDetail = `${currentTerm.chamber} since ${firstTermInChamber.startYear}`;
   }
 
   const trendingBills = await getTrendingBills(10);

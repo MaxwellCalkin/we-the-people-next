@@ -15,7 +15,7 @@ import GlassCard from "@/components/ui/GlassCard";
 import VoteStats from "@/components/features/VoteStats";
 import RepVoteDisplay from "@/components/features/RepVoteDisplay";
 import MagneticButton from "@/components/ui/MagneticButton";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Users } from "lucide-react";
 
 interface VotedPageProps {
   params: Promise<{ slug: string; congress: string }>;
@@ -120,6 +120,15 @@ export default async function VotedPage({ params }: VotedPageProps) {
             : "Your Senators\u2019 Votes"}
         </h2>
         <RepVoteDisplay reps={repVotes} />
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <Link
+            href={`/vote/${slug}/${congress}/votes`}
+            className="inline-flex items-center gap-1.5 text-gold text-sm hover:text-gold/80 transition-colors"
+          >
+            <Users className="h-3.5 w-3.5" />
+            See how all members voted
+          </Link>
+        </div>
       </GlassCard>
 
       {/* Post CTA */}

@@ -31,11 +31,27 @@ export async function cacheVotesAndRecomputeScores(
     const actions = actionsData.actions || [];
 
     const rollCallVotes: { url: string; chamber: string }[] = [];
+    const seenUrls = new Set<string>();
 
     for (const action of actions) {
       if (action.recordedVotes && action.recordedVotes.length > 0) {
+        // Only cache passage/final votes, not procedural votes that share the
+        // same bill slug but record a different question (recommit, amendments,
+        // points of order, motions to table/proceed, cloture, etc.)
+        const text = (action.text || "").toLowerCase();
+        const isProcedural =
+          text.includes("recommit") ||
+          text.includes("amendment") ||
+          text.includes("point of order") ||
+          text.includes("motion to table") ||
+          text.includes("motion to proceed") ||
+          text.includes("cloture") ||
+          text.includes("motion to reconsider");
+        if (isProcedural) continue;
+
         for (const rv of action.recordedVotes) {
-          if (!rv.url) continue;
+          if (!rv.url || seenUrls.has(rv.url)) continue;
+          seenUrls.add(rv.url);
           const chamber = rv.url.includes("senate.gov") ? "Senate" : "House";
           rollCallVotes.push({ url: rv.url, chamber });
         }

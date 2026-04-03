@@ -316,33 +316,74 @@ export async function getMemberVoteOnBill(
     const actionsData = await actionsResp.json();
     const actions = actionsData.actions || [];
 
-    // Find actions that have recorded votes
+    // Find actions that have recorded votes, filtered to the target chamber.
+    // A bill can pass one chamber by roll call and the other by voice vote,
+    // so we must only look at the relevant chamber's actions.
+    const chamberLower = chamber.toLowerCase();
+    const chamberDomain = chamberLower === "senate" ? "senate.gov" : "clerk.house.gov";
     const rollCallVotes: { url?: string }[] = [];
     let passedByUC = false;
     let passedByVoice = false;
 
     for (const action of actions) {
+      // Check if this action belongs to the target chamber
+      const sourceName = (action.sourceSystem?.name || "").toLowerCase();
+      const isTargetChamber =
+        sourceName.includes(chamberLower) ||
+        (chamberLower === "house" && sourceName.includes("house"));
+
       if (action.recordedVotes && action.recordedVotes.length > 0) {
-        rollCallVotes.push(...action.recordedVotes);
-      }
-      // Detect unanimous consent or voice vote passages
-      const text = (action.text || "").toLowerCase();
-      if (text.includes("passed") || text.includes("agreed to")) {
-        if (
-          text.includes("unanimous consent") ||
-          text.includes("without objection") ||
-          text.includes("without amendment")
-        ) {
-          passedByUC = true;
+        // Only include roll call votes from the target chamber
+        for (const rv of action.recordedVotes) {
+          const rvChamber = (rv.chamber || "").toLowerCase();
+          const rvUrl = rv.url || "";
+          if (
+            rvChamber === chamberLower ||
+            rvUrl.includes(chamberDomain) ||
+            isTargetChamber
+          ) {
+            rollCallVotes.push(rv);
+          }
         }
+      }
+
+      // Detect unanimous consent or voice vote passages for this chamber
+      if (isTargetChamber) {
+        const text = (action.text || "").toLowerCase();
+        if (text.includes("passed") || text.includes("agreed to")) {
+          if (text.includes("voice vote")) {
+            passedByVoice = true;
+          } else if (
+            text.includes("unanimous consent") ||
+            text.includes("without objection")
+          ) {
+            passedByUC = true;
+          }
+        }
+      }
+    }
+
+    // Also check Library of Congress summary actions (sourceSystem code 9)
+    // which may describe passage in a specific chamber
+    for (const action of actions) {
+      const sourceCode = action.sourceSystem?.code;
+      if (sourceCode !== 9) continue;
+      const text = (action.text || "").toLowerCase();
+      if (!text.includes(chamberLower)) continue;
+      if (text.includes("passed") || text.includes("agreed to")) {
         if (text.includes("voice vote")) {
           passedByVoice = true;
+        } else if (
+          text.includes("unanimous consent") ||
+          text.includes("without objection")
+        ) {
+          passedByUC = true;
         }
       }
     }
 
     if (rollCallVotes.length === 0) {
-      // No recorded roll call vote -- check if it passed another way
+      // No recorded roll call vote in this chamber — check if it passed another way
       if (passedByUC) return "Passed by Unanimous Consent";
       if (passedByVoice) return "Passed by Voice Vote";
 
@@ -470,6 +511,149 @@ export async function getMemberVoteOnBill(
       err instanceof Error ? err.message : err
     );
     return "Has Not Voted On This Bill";
+  }
+}
+
+/** A single member's vote from a roll call */
+export interface RollCallMemberVote {
+  name: string;
+  party: string;
+  state: string;
+  vote: string; // "Yea", "Nay", "Not Voting", "Present"
+}
+
+/** Full roll call result for a bill */
+export interface RollCallResult {
+  chamber: string; // "Senate" or "House"
+  question: string;
+  date: string;
+  votes: RollCallMemberVote[];
+}
+
+/**
+ * Fetch all members' votes on a bill from the roll call XML.
+ * Returns roll call results with every member's vote, or a special
+ * status string for unanimous consent / voice vote / no vote found.
+ */
+export async function getAllVotesOnBill(
+  congress: number | string,
+  billType: string,
+  billNumber: string
+): Promise<
+  | { type: "roll_call"; results: RollCallResult[] }
+  | { type: "special"; status: string }
+> {
+  try {
+    const actionsUrl = `${CONGRESS_API}/bill/${congress}/${billType}/${billNumber}/actions?api_key=${process.env.CONGRESS_KEY}&format=json&limit=50`;
+    const actionsResp = await fetch(actionsUrl);
+    const actionsData = await actionsResp.json();
+    const actions = actionsData.actions || [];
+
+    const rollCallVotes: { url?: string }[] = [];
+    let passedByUC = false;
+    let passedByVoice = false;
+
+    for (const action of actions) {
+      if (action.recordedVotes && action.recordedVotes.length > 0) {
+        rollCallVotes.push(...action.recordedVotes);
+      }
+      const text = (action.text || "").toLowerCase();
+      if (text.includes("passed") || text.includes("agreed to")) {
+        if (text.includes("voice vote")) {
+          passedByVoice = true;
+        } else if (
+          text.includes("unanimous consent") ||
+          text.includes("without objection")
+        ) {
+          passedByUC = true;
+        }
+      }
+    }
+
+    if (rollCallVotes.length === 0) {
+      if (passedByUC) return { type: "special", status: "Passed by Unanimous Consent" };
+      if (passedByVoice) return { type: "special", status: "Passed by Voice Vote" };
+      return { type: "special", status: "No recorded vote found" };
+    }
+
+    const results: RollCallResult[] = [];
+
+    for (const rv of rollCallVotes) {
+      const voteUrl = rv.url;
+      if (!voteUrl) continue;
+
+      if (voteUrl.includes("senate.gov")) {
+        try {
+          const xmlResp = await fetch(voteUrl);
+          const xmlText = await xmlResp.text();
+
+          const questionMatch = xmlText.match(/<vote_question_text>([^<]+)<\/vote_question_text>/i);
+          const dateMatch = xmlText.match(/<vote_date>([^<]+)<\/vote_date>/i);
+
+          const votes: RollCallMemberVote[] = [];
+          const memberRegex = /<member>[\s\S]*?<first_name>([^<]*)<\/first_name>[\s\S]*?<last_name>([^<]*)<\/last_name>[\s\S]*?<party>([^<]*)<\/party>[\s\S]*?<state>([^<]*)<\/state>[\s\S]*?<vote_cast>([^<]*)<\/vote_cast>[\s\S]*?<\/member>/gi;
+          let m;
+          while ((m = memberRegex.exec(xmlText)) !== null) {
+            votes.push({
+              name: `${m[1]} ${m[2]}`.trim(),
+              party: m[3],
+              state: m[4],
+              vote: m[5],
+            });
+          }
+
+          results.push({
+            chamber: "Senate",
+            question: questionMatch?.[1] || "Vote",
+            date: dateMatch?.[1] || "",
+            votes,
+          });
+        } catch (e) {
+          console.log("Error fetching Senate vote XML:", e instanceof Error ? e.message : e);
+        }
+      } else if (voteUrl.includes("clerk.house.gov")) {
+        try {
+          const xmlResp = await fetch(voteUrl);
+          const xmlText = await xmlResp.text();
+
+          const questionMatch = xmlText.match(/<vote-question>([^<]+)<\/vote-question>/i);
+          const dateMatch = xmlText.match(/<action-date[^>]*>([^<]+)<\/action-date>/i);
+
+          const votes: RollCallMemberVote[] = [];
+          const memberRegex = /<recorded-vote>[\s\S]*?<legislator[^>]*\sparty="([^"]*)"[^>]*\sstate="([^"]*)"[^>]*>([^<]*)<\/legislator>[\s\S]*?<vote>([^<]*)<\/vote>[\s\S]*?<\/recorded-vote>/gi;
+          let m;
+          while ((m = memberRegex.exec(xmlText)) !== null) {
+            let vote = m[4];
+            if (vote === "Aye") vote = "Yea";
+            if (vote === "No") vote = "Nay";
+            votes.push({
+              name: m[3].trim(),
+              party: m[1],
+              state: m[2],
+              vote,
+            });
+          }
+
+          results.push({
+            chamber: "House",
+            question: questionMatch?.[1] || "Vote",
+            date: dateMatch?.[1] || "",
+            votes,
+          });
+        } catch (e) {
+          console.log("Error fetching House vote XML:", e instanceof Error ? e.message : e);
+        }
+      }
+    }
+
+    if (results.length === 0) {
+      return { type: "special", status: "No recorded vote found" };
+    }
+
+    return { type: "roll_call", results };
+  } catch (err) {
+    console.log("Error in getAllVotesOnBill:", err instanceof Error ? err.message : err);
+    return { type: "special", status: "Error fetching votes" };
   }
 }
 

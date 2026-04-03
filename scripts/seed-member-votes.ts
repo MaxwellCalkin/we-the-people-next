@@ -151,6 +151,19 @@ async function parseSenateVote(
 
     if (!billSlug) return null; // Skip non-bill votes (nominations, etc.)
 
+    // Skip procedural votes to avoid overwriting passage votes
+    const qMatch2 = xml.match(/<question>([^<]*)<\/question>/);
+    const question = qMatch2 ? qMatch2[1].toLowerCase() : "";
+    if (
+      question.includes("recommit") ||
+      question.includes("amendment") ||
+      question.includes("point of order") ||
+      question.includes("motion to table") ||
+      question.includes("motion to proceed") ||
+      question.includes("cloture") ||
+      question.includes("motion to reconsider")
+    ) return null;
+
     // Extract member votes — Senate uses <member_full> and <lis_member_id>, not bioguide
     // Match by last name from <member_full> e.g. "Gillibrand (D-NY)"
     const votes: { bioguideId: string; vote: string }[] = [];
@@ -208,6 +221,20 @@ async function parseHouseVote(
     }
 
     if (!billSlug) return null; // Skip procedural votes
+
+    // Skip procedural votes — they share a bill slug with the
+    // passage vote and would overwrite it via upsert
+    const questionMatch = xml.match(/<vote-question>([^<]*)<\/vote-question>/);
+    const question = questionMatch ? questionMatch[1].toLowerCase() : "";
+    if (
+      question.includes("recommit") ||
+      question.includes("amendment") ||
+      question.includes("point of order") ||
+      question.includes("motion to table") ||
+      question.includes("motion to proceed") ||
+      question.includes("cloture") ||
+      question.includes("motion to reconsider")
+    ) return null;
 
     let title = "";
     const titleMatch = xml.match(/<vote-desc>([^<]*)<\/vote-desc>/);
