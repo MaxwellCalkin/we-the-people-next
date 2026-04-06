@@ -34,18 +34,31 @@ export default async function VotedPage({ params }: VotedPageProps) {
   const userState = session.user.state;
   const userCd = session.user.cd;
 
-  // Determine which chamber this bill belongs to
   const parsed = parseBillSlug(bill.bill_slug);
-  const houseBillTypes = ["hr", "hres", "hjres", "hconres"];
-  const isHouseBill = houseBillTypes.includes(bill.bill_type || "");
 
-  // Only fetch and show the relevant chamber's representatives
+  // Fetch all of the user's representatives and their votes on this bill
   const repVotes: { name: string; vote: string; role: string }[] = [];
 
-  if (isHouseBill) {
-    // House bill — only show House representative
+  if (parsed) {
+    // Senators
+    const allStateMembers = await fetchMembers(userState);
+    const senators = allStateMembers.filter(
+      (m) => !m.district || m.district === 0
+    );
+    for (const senator of senators.slice(0, 2)) {
+      const vote = await getMemberVoteOnBill(
+        senator.id,
+        congress,
+        parsed.type,
+        parsed.number,
+        "senate"
+      );
+      repVotes.push({ name: senator.name, vote, role: "Senator" });
+    }
+
+    // House representative
     const houseReps = await fetchMembers(userState, userCd);
-    if (houseReps.length > 0 && parsed) {
+    if (houseReps.length > 0) {
       const vote = await getMemberVoteOnBill(
         houseReps[0].id,
         congress,
@@ -58,24 +71,6 @@ export default async function VotedPage({ params }: VotedPageProps) {
         vote,
         role: "House Representative",
       });
-    }
-  } else {
-    // Senate bill — only show Senators
-    const allStateMembers = await fetchMembers(userState);
-    const senators = allStateMembers.filter(
-      (m) => !m.district || m.district === 0
-    );
-    for (const senator of senators.slice(0, 2)) {
-      if (parsed) {
-        const vote = await getMemberVoteOnBill(
-          senator.id,
-          congress,
-          parsed.type,
-          parsed.number,
-          "senate"
-        );
-        repVotes.push({ name: senator.name, vote, role: "Senator" });
-      }
     }
   }
 
@@ -115,9 +110,7 @@ export default async function VotedPage({ params }: VotedPageProps) {
       {/* Representative Votes */}
       <GlassCard>
         <h2 className="font-brand text-xl text-cream mb-4">
-          {isHouseBill
-            ? "Your House Representative\u2019s Vote"
-            : "Your Senators\u2019 Votes"}
+          Your Representatives&apos; Votes
         </h2>
         <RepVoteDisplay reps={repVotes} />
         <div className="mt-4 pt-4 border-t border-white/10">

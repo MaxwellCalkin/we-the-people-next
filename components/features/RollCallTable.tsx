@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { RollCallResult } from "@/lib/congress";
 
 interface RollCallTableProps {
@@ -48,6 +49,7 @@ function filterBadgeColor(filter: VoteFilter, active: boolean): string {
 }
 
 export default function RollCallTable({ rollCall }: RollCallTableProps) {
+  const router = useRouter();
   const [filter, setFilter] = useState<VoteFilter>("all");
   const [search, setSearch] = useState("");
 
@@ -135,7 +137,12 @@ export default function RollCallTable({ rollCall }: RollCallTableProps) {
             {filtered.map((member, i) => (
               <tr
                 key={i}
-                className="border-b border-white/5 last:border-0"
+                className={`border-b border-white/5 last:border-0${member.bioguideId ? " hover:bg-white/5 transition-colors cursor-pointer" : ""}`}
+                onClick={
+                  member.bioguideId
+                    ? () => router.push(`/members/${member.bioguideId}`)
+                    : undefined
+                }
               >
                 <td className="py-2 pr-4 text-cream">{member.name}</td>
                 <td className="py-2 pr-4 text-cream/60">

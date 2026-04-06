@@ -516,6 +516,7 @@ export async function getMemberVoteOnBill(
 
 /** A single member's vote from a roll call */
 export interface RollCallMemberVote {
+  bioguideId?: string;
   name: string;
   party: string;
   state: string;
@@ -540,7 +541,7 @@ export async function getAllVotesOnBill(
   billType: string,
   billNumber: string
 ): Promise<
-  | { type: "roll_call"; results: RollCallResult[] }
+  | { type: "roll_call"; results: RollCallResult[]; chamberStatuses?: { chamber: string; status: string }[] }
   | { type: "special"; status: string }
 > {
   try {
@@ -552,20 +553,35 @@ export async function getAllVotesOnBill(
     const rollCallVotes: { url?: string }[] = [];
     let passedByUC = false;
     let passedByVoice = false;
+    // Track per-chamber special statuses (UC / voice vote)
+    const senateSpecial: { uc: boolean; voice: boolean } = { uc: false, voice: false };
+    const houseSpecial: { uc: boolean; voice: boolean } = { uc: false, voice: false };
 
+    const seenUrls = new Set<string>();
     for (const action of actions) {
       if (action.recordedVotes && action.recordedVotes.length > 0) {
-        rollCallVotes.push(...action.recordedVotes);
+        for (const rv of action.recordedVotes) {
+          const url = rv.url || "";
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url);
+            rollCallVotes.push(rv);
+          }
+        }
       }
       const text = (action.text || "").toLowerCase();
+      const sourceName = (action.sourceSystem?.name || "").toLowerCase();
       if (text.includes("passed") || text.includes("agreed to")) {
         if (text.includes("voice vote")) {
           passedByVoice = true;
+          if (sourceName.includes("senate")) senateSpecial.voice = true;
+          if (sourceName.includes("house")) houseSpecial.voice = true;
         } else if (
           text.includes("unanimous consent") ||
           text.includes("without objection")
         ) {
           passedByUC = true;
+          if (sourceName.includes("senate")) senateSpecial.uc = true;
+          if (sourceName.includes("house")) houseSpecial.uc = true;
         }
       }
     }
@@ -591,14 +607,15 @@ export async function getAllVotesOnBill(
           const dateMatch = xmlText.match(/<vote_date>([^<]+)<\/vote_date>/i);
 
           const votes: RollCallMemberVote[] = [];
-          const memberRegex = /<member>[\s\S]*?<first_name>([^<]*)<\/first_name>[\s\S]*?<last_name>([^<]*)<\/last_name>[\s\S]*?<party>([^<]*)<\/party>[\s\S]*?<state>([^<]*)<\/state>[\s\S]*?<vote_cast>([^<]*)<\/vote_cast>[\s\S]*?<\/member>/gi;
+          const memberRegex = /<member>[\s\S]*?<first_name>([^<]*)<\/first_name>[\s\S]*?<last_name>([^<]*)<\/last_name>[\s\S]*?<party>([^<]*)<\/party>[\s\S]*?<state>([^<]*)<\/state>[\s\S]*?(?:<bioguide_id>([^<]*)<\/bioguide_id>[\s\S]*?)?<vote_cast>([^<]*)<\/vote_cast>[\s\S]*?<\/member>/gi;
           let m;
           while ((m = memberRegex.exec(xmlText)) !== null) {
             votes.push({
+              bioguideId: m[5] || undefined,
               name: `${m[1]} ${m[2]}`.trim(),
               party: m[3],
               state: m[4],
-              vote: m[5],
+              vote: m[6],
             });
           }
 
@@ -620,16 +637,21 @@ export async function getAllVotesOnBill(
           const dateMatch = xmlText.match(/<action-date[^>]*>([^<]+)<\/action-date>/i);
 
           const votes: RollCallMemberVote[] = [];
-          const memberRegex = /<recorded-vote>[\s\S]*?<legislator[^>]*\sparty="([^"]*)"[^>]*\sstate="([^"]*)"[^>]*>([^<]*)<\/legislator>[\s\S]*?<vote>([^<]*)<\/vote>[\s\S]*?<\/recorded-vote>/gi;
+          const recordedVoteRegex = /<recorded-vote>[\s\S]*?<legislator([^>]*)>([^<]*)<\/legislator>[\s\S]*?<vote>([^<]*)<\/vote>[\s\S]*?<\/recorded-vote>/gi;
           let m;
-          while ((m = memberRegex.exec(xmlText)) !== null) {
-            let vote = m[4];
+          while ((m = recordedVoteRegex.exec(xmlText)) !== null) {
+            const attrs = m[1];
+            const nameId = attrs.match(/name-id="([^"]*)"/)?.[1];
+            const party = attrs.match(/party="([^"]*)"/)?.[1] || "";
+            const state = attrs.match(/state="([^"]*)"/)?.[1] || "";
+            let vote = m[3];
             if (vote === "Aye") vote = "Yea";
             if (vote === "No") vote = "Nay";
             votes.push({
-              name: m[3].trim(),
-              party: m[1],
-              state: m[2],
+              bioguideId: nameId || undefined,
+              name: m[2].trim(),
+              party,
+              state,
               vote,
             });
           }
@@ -650,7 +672,20 @@ export async function getAllVotesOnBill(
       return { type: "special", status: "No recorded vote found" };
     }
 
-    return { type: "roll_call", results };
+    // Identify chambers that passed without a roll call
+    const chamberStatuses: { chamber: string; status: string }[] = [];
+    const hasSenateRollCall = results.some((r) => r.chamber === "Senate");
+    const hasHouseRollCall = results.some((r) => r.chamber === "House");
+    if (!hasSenateRollCall) {
+      if (senateSpecial.uc) chamberStatuses.push({ chamber: "Senate", status: "Passed by Unanimous Consent" });
+      else if (senateSpecial.voice) chamberStatuses.push({ chamber: "Senate", status: "Passed by Voice Vote" });
+    }
+    if (!hasHouseRollCall) {
+      if (houseSpecial.uc) chamberStatuses.push({ chamber: "House", status: "Passed by Unanimous Consent" });
+      else if (houseSpecial.voice) chamberStatuses.push({ chamber: "House", status: "Passed by Voice Vote" });
+    }
+
+    return { type: "roll_call", results, chamberStatuses: chamberStatuses.length > 0 ? chamberStatuses : undefined };
   } catch (err) {
     console.log("Error in getAllVotesOnBill:", err instanceof Error ? err.message : err);
     return { type: "special", status: "Error fetching votes" };

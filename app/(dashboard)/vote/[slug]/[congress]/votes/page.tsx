@@ -56,9 +56,22 @@ export default async function AllVotesPage({ params }: VotesPageProps) {
           </p>
         </GlassCard>
       ) : (
-        voteData.results.map((rollCall, i) => (
-          <RollCallTable key={i} rollCall={rollCall} />
-        ))
+        <>
+          {voteData.chamberStatuses?.map((cs, i) => (
+            <GlassCard key={`status-${i}`} className="text-center py-6">
+              <h2 className="font-brand text-xl text-cream mb-1">
+                {cs.chamber}
+              </h2>
+              <p className="text-cream/60 text-sm">{cs.status}</p>
+              <p className="text-cream/40 text-xs mt-1">
+                No individual member vote records available.
+              </p>
+            </GlassCard>
+          ))}
+          {voteData.results.map((rollCall, i) => (
+            <RollCallTable key={i} rollCall={rollCall} />
+          ))}
+        </>
       )}
     </div>
   );
