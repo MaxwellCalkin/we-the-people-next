@@ -11,6 +11,14 @@ export interface BillResult {
   latest_major_action: string;
   latest_major_action_date: string;
   sponsor?: string;
+  cboCostEstimates?: CboCostEstimate[];
+}
+
+export interface CboCostEstimate {
+  title: string;
+  description: string;
+  pubDate: string;
+  url: string;
 }
 
 export interface MemberResult {

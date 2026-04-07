@@ -56,6 +56,25 @@ export async function fetchBillDetails(
     );
   }
 
+  // CBO cost estimates are embedded in the bill response as an array.
+  // Each item: { title, description, pubDate, url } where url points to a
+  // cbo.gov publication page (public domain, U.S. government work).
+  const cboCostEstimates = Array.isArray(b.cboCostEstimates)
+    ? (b.cboCostEstimates as Array<{
+        title?: string;
+        description?: string;
+        pubDate?: string;
+        url?: string;
+      }>)
+        .filter((e) => e.url)
+        .map((e) => ({
+          title: e.title || "",
+          description: e.description || "",
+          pubDate: e.pubDate || "",
+          url: e.url || "",
+        }))
+    : undefined;
+
   // Normalize to match our BillResult interface
   return {
     short_title: b.title || "",
@@ -73,6 +92,7 @@ export async function fetchBillDetails(
       : "",
     sponsor:
       b.sponsors && b.sponsors.length > 0 ? b.sponsors[0].fullName : "",
+    cboCostEstimates: cboCostEstimates && cboCostEstimates.length > 0 ? cboCostEstimates : undefined,
   };
 }
 

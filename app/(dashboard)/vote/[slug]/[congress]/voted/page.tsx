@@ -15,7 +15,7 @@ import GlassCard from "@/components/ui/GlassCard";
 import VoteStats from "@/components/features/VoteStats";
 import RepVoteDisplay from "@/components/features/RepVoteDisplay";
 import MagneticButton from "@/components/ui/MagneticButton";
-import { ExternalLink, Users } from "lucide-react";
+import { ExternalLink, Users, FileText } from "lucide-react";
 
 interface VotedPageProps {
   params: Promise<{ slug: string; congress: string }>;
@@ -98,6 +98,41 @@ export default async function VotedPage({ params }: VotedPageProps) {
           View on GovTrack <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </GlassCard>
+
+      {/* CBO Budget Impact */}
+      {bill.cboCostEstimates && bill.cboCostEstimates.length > 0 && (
+        <GlassCard>
+          <h2 className="font-brand text-xl text-cream mb-2">
+            Budget Impact
+          </h2>
+          <p className="text-cream/60 text-sm mb-4">
+            Cost estimates from the Congressional Budget Office. Source: CBO (public domain).
+          </p>
+          <ul className="space-y-3">
+            {bill.cboCostEstimates.map((est, i) => (
+              <li key={i} className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
+                <a
+                  href={est.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-start gap-1.5 text-gold text-sm hover:text-gold/80 transition-colors"
+                >
+                  <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{est.title || "CBO Cost Estimate"}</span>
+                </a>
+                {est.description && (
+                  <p className="text-cream/70 text-xs mt-1">{est.description}</p>
+                )}
+                {est.pubDate && (
+                  <p className="text-cream/40 text-xs mt-1">
+                    {new Date(est.pubDate).toLocaleDateString()}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </GlassCard>
+      )}
 
       {/* Community Vote Stats */}
       <GlassCard>

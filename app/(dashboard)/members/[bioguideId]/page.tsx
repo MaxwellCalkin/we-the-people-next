@@ -9,12 +9,20 @@ import User from "@/models/User";
 import MemberScore from "@/models/MemberScore";
 import MemberVote from "@/models/MemberVote";
 import Bill from "@/models/Bill";
+import LegislatorCrosswalk from "@/models/LegislatorCrosswalk";
 import { fetchMemberDetail } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import { getTrendingBills } from "@/lib/trending";
+import { currentCycle, type CandidateTotals, type ContributorAggregate } from "@/lib/fec";
+import {
+  loadCachedFinance,
+  mongoFinanceStore,
+  liveFecFetcher,
+} from "@/lib/fec-cache";
 import MemberProfileHeader from "@/components/features/MemberProfileHeader";
 import MemberStats from "@/components/features/MemberStats";
 import MemberVoteList from "@/components/features/MemberVoteList";
+import CampaignFinance from "@/components/features/CampaignFinance";
 import GlassCard from "@/components/ui/GlassCard";
 
 interface MemberProfilePageProps {
@@ -60,6 +68,40 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
     ) || currentTerm;
     tenureYears = new Date().getFullYear() - firstTermInChamber.startYear;
     tenureDetail = `${currentTerm.chamber} since ${firstTermInChamber.startYear}`;
+  }
+
+  // Campaign finance: bioguide → FEC candidate ID via crosswalk → OpenFEC.
+  // Each lookup is wrapped in try/catch so a flaky external API never breaks
+  // the member page.
+  const cycle = currentCycle();
+  let financeTotals: CandidateTotals | null = null;
+  let financeIndividuals: ContributorAggregate[] = [];
+  let financePacs: ContributorAggregate[] = [];
+  let opensecretsId: string | undefined;
+  const crosswalk = await LegislatorCrosswalk.findOne({ bioguideId }).lean();
+  if (crosswalk) {
+    opensecretsId = crosswalk.opensecretsId;
+    const fecId = (crosswalk.fecIds || [])[0];
+    if (fecId && process.env.FEC_API_KEY) {
+      try {
+        const finance = await loadCachedFinance(
+          bioguideId,
+          fecId,
+          cycle,
+          mongoFinanceStore,
+          liveFecFetcher
+        );
+        financeTotals = finance.totals;
+        financeIndividuals = finance.topIndividuals;
+        financePacs = finance.topPacs;
+      } catch (e) {
+        console.error(
+          "FEC lookup failed for",
+          bioguideId,
+          e instanceof Error ? e.message : e
+        );
+      }
+    }
   }
 
   const trendingBills = await getTrendingBills(10);
@@ -168,6 +210,15 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
           </div>
         </div>
       )}
+
+      <CampaignFinance
+        cycle={cycle}
+        totals={financeTotals}
+        topIndividuals={financeIndividuals}
+        topPacs={financePacs}
+        opensecretsId={opensecretsId}
+        memberName={detail.name}
+      />
 
       <div>
         <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-1">
