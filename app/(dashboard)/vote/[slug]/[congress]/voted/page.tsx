@@ -28,57 +28,55 @@ export default async function VotedPage({ params }: VotedPageProps) {
   await connectDB();
   const { slug, congress } = await params;
 
-  const bill = await fetchBillDetails(congress, slug);
-  if (!bill) redirect("/bills");
-
   const userState = session.user.state;
   const userCd = session.user.cd;
+  const parsed = parseBillSlug(slug);
 
-  const parsed = parseBillSlug(bill.bill_slug);
+  // Fan out all independent I/O concurrently. Previously this page did
+  // ~6 sequential awaits (bill → senators → 2× senator votes → house reps →
+  // house vote → post), which made cold loads feel slow. None of these
+  // actually depend on each other: the bill fetch only gates redirect, and
+  // rep-vote lookups are keyed off the URL slug, not the bill response.
+  const [bill, allStateMembers, houseReps, existingPost] = await Promise.all([
+    fetchBillDetails(congress, slug),
+    fetchMembers(userState),
+    fetchMembers(userState, userCd),
+    Post.findOne({ user: session.user.id, billSlug: slug }).lean(),
+  ]);
 
-  // Fetch all of the user's representatives and their votes on this bill
+  if (!bill) redirect("/bills");
+
+  const senators = allStateMembers
+    .filter((m) => !m.district || m.district === 0)
+    .slice(0, 2);
+
   const repVotes: { name: string; vote: string; role: string }[] = [];
-
   if (parsed) {
-    // Senators
-    const allStateMembers = await fetchMembers(userState);
-    const senators = allStateMembers.filter(
-      (m) => !m.district || m.district === 0
+    const voteTargets = [
+      ...senators.map((s) => ({
+        id: s.id,
+        name: s.name,
+        role: "Senator" as const,
+        chamber: "senate" as const,
+      })),
+      ...(houseReps[0]
+        ? [{
+            id: houseReps[0].id,
+            name: houseReps[0].name,
+            role: "House Representative" as const,
+            chamber: "house" as const,
+          }]
+        : []),
+    ];
+    const votes = await Promise.all(
+      voteTargets.map((t) =>
+        getMemberVoteOnBill(t.id, congress, parsed.type, parsed.number, t.chamber)
+      )
     );
-    for (const senator of senators.slice(0, 2)) {
-      const vote = await getMemberVoteOnBill(
-        senator.id,
-        congress,
-        parsed.type,
-        parsed.number,
-        "senate"
-      );
-      repVotes.push({ name: senator.name, vote, role: "Senator" });
-    }
-
-    // House representative
-    const houseReps = await fetchMembers(userState, userCd);
-    if (houseReps.length > 0) {
-      const vote = await getMemberVoteOnBill(
-        houseReps[0].id,
-        congress,
-        parsed.type,
-        parsed.number,
-        "house"
-      );
-      repVotes.push({
-        name: houseReps[0].name,
-        vote,
-        role: "House Representative",
-      });
-    }
+    voteTargets.forEach((t, i) => {
+      repVotes.push({ name: t.name, vote: votes[i], role: t.role });
+    });
   }
-
-  // Check if user has a post for this bill
-  const existingPost = await Post.findOne({
-    user: session.user.id,
-    billSlug: bill.bill_slug,
-  }).lean();
 
   const govtrackUrl = `https://www.govtrack.us/congress/bills/${congress}/${bill.bill_slug}`;
 
@@ -102,32 +100,56 @@ export default async function VotedPage({ params }: VotedPageProps) {
       {/* CBO Budget Impact */}
       {bill.cboCostEstimates && bill.cboCostEstimates.length > 0 && (
         <GlassCard>
-          <h2 className="font-brand text-xl text-cream mb-2">
-            Budget Impact
-          </h2>
-          <p className="text-cream/60 text-sm mb-4">
-            Cost estimates from the Congressional Budget Office. Source: CBO (public domain).
-          </p>
-          <ul className="space-y-3">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 h-12 w-12 rounded-lg bg-gold/10 border border-gold/30 flex items-center justify-center">
+              <FileText className="h-6 w-6 text-gold" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.65rem] uppercase tracking-widest text-gold/80">
+                Congressional Budget Office
+              </p>
+              <h2 className="font-brand text-xl text-cream mt-0.5">
+                {bill.cboCostEstimates.length === 1
+                  ? "Budget Impact Estimate"
+                  : `${bill.cboCostEstimates.length} Budget Estimates`}
+              </h2>
+              <p className="text-cream/50 text-xs mt-1">
+                The CBO publishes nonpartisan cost analyses of legislation. Figures aren&apos;t
+                machine-readable, so we link to the full report.
+              </p>
+            </div>
+          </div>
+
+          <ul className="mt-5 space-y-3">
             {bill.cboCostEstimates.map((est, i) => (
-              <li key={i} className="border-t border-white/10 pt-3 first:border-t-0 first:pt-0">
+              <li key={i}>
                 <a
                   href={est.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-start gap-1.5 text-gold text-sm hover:text-gold/80 transition-colors"
+                  className="group block rounded-lg border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] hover:border-gold/40 transition-colors p-4"
                 >
-                  <FileText className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>{est.title || "CBO Cost Estimate"}</span>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-cream font-medium text-sm group-hover:text-gold transition-colors">
+                      {est.title || "CBO Cost Estimate"}
+                    </p>
+                    <ExternalLink className="h-4 w-4 text-cream/40 group-hover:text-gold shrink-0 mt-0.5 transition-colors" />
+                  </div>
+                  {est.description && (
+                    <p className="text-cream/60 text-xs mt-1.5 leading-relaxed">
+                      {est.description}
+                    </p>
+                  )}
+                  {est.pubDate && (
+                    <p className="mt-3 inline-block text-[0.6rem] uppercase tracking-wider text-cream/40 bg-white/5 rounded px-2 py-0.5">
+                      Published {new Date(est.pubDate).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  )}
                 </a>
-                {est.description && (
-                  <p className="text-cream/70 text-xs mt-1">{est.description}</p>
-                )}
-                {est.pubDate && (
-                  <p className="text-cream/40 text-xs mt-1">
-                    {new Date(est.pubDate).toLocaleDateString()}
-                  </p>
-                )}
               </li>
             ))}
           </ul>
