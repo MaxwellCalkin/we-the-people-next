@@ -3,6 +3,12 @@
 // Pure parsing logic for the unitedstates/congress-legislators dataset.
 // Extracted from the ingest script so it can be unit-tested without touching
 // Mongo or the network.
+//
+// Also exports `findIncumbentByFecId` — the reverse direction of the standard
+// bioguide→fecIds lookup, used by the elections feature to link a candidate
+// card back to their /members/[bioguideId] page when they're an incumbent.
+
+import LegislatorCrosswalk from "@/models/LegislatorCrosswalk";
 
 export interface LegislatorRecord {
   id?: {
@@ -58,4 +64,25 @@ export function parseLegislators(records: LegislatorRecord[]): CrosswalkRow[] {
     if (row) rows.push(row);
   }
   return rows;
+}
+
+export interface IncumbentLink {
+  bioguideId: string;
+}
+
+/**
+ * Returns the bioguideId of an incumbent with this FEC candidate ID, or null
+ * if the FEC ID belongs to a challenger or non-sitting candidate.
+ *
+ * LegislatorCrosswalk.fecIds is an array because a legislator can have
+ * multiple FEC IDs across cycles. Mongo's array-element match handles it.
+ */
+export async function findIncumbentByFecId(
+  fecId: string
+): Promise<IncumbentLink | null> {
+  const doc = await LegislatorCrosswalk.findOne({ fecIds: fecId })
+    .select("bioguideId")
+    .lean();
+  if (!doc) return null;
+  return { bioguideId: doc.bioguideId };
 }

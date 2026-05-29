@@ -12,16 +12,19 @@
 import FecCache from "@/models/FecCache";
 import {
   getCandidateTotals,
+  getOutsideSpending,
   getTopIndividualContributions,
   getTopPacContributions,
   type CandidateTotals,
   type ContributorAggregate,
+  type OutsideSpending,
 } from "./fec";
 
 export interface MemberFinance {
   totals: CandidateTotals | null;
   topIndividuals: ContributorAggregate[];
   topPacs: ContributorAggregate[];
+  outsideSpending: OutsideSpending | null;
 }
 
 export interface CachedFinanceRow extends MemberFinance {
@@ -62,6 +65,7 @@ export async function loadCachedFinance(
       totals: cached.totals,
       topIndividuals: cached.topIndividuals,
       topPacs: cached.topPacs,
+      outsideSpending: cached.outsideSpending,
     };
   }
 
@@ -80,6 +84,7 @@ export const mongoFinanceStore: FinanceStore = {
       totals: doc.totals,
       topIndividuals: doc.topIndividuals || [],
       topPacs: doc.topPacs || [],
+      outsideSpending: doc.outsideSpending ?? null,
       fetchedAt: doc.fetchedAt,
     };
   },
@@ -92,6 +97,7 @@ export const mongoFinanceStore: FinanceStore = {
           totals: data.totals,
           topIndividuals: data.topIndividuals,
           topPacs: data.topPacs,
+          outsideSpending: data.outsideSpending,
           fetchedAt: now,
           expiresAt: new Date(now.getTime() + ttlMs),
         },
@@ -103,11 +109,15 @@ export const mongoFinanceStore: FinanceStore = {
 
 export const liveFecFetcher: FinanceFetcher = {
   async fetch(fecId, cycle) {
-    const [totals, topIndividuals, topPacs] = await Promise.all([
+    const [totals, topIndividuals, topPacs, outsideSpending] = await Promise.all([
       getCandidateTotals(fecId, cycle),
       getTopIndividualContributions(fecId, cycle, 5),
       getTopPacContributions(fecId, cycle, 5),
+      getOutsideSpending(fecId, cycle).catch((e) => {
+        console.error("Outside spending lookup failed for", fecId, e);
+        return null;
+      }),
     ]);
-    return { totals, topIndividuals, topPacs };
+    return { totals, topIndividuals, topPacs, outsideSpending };
   },
 };

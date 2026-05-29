@@ -93,8 +93,10 @@ describe("getCandidateTotals", () => {
     expect(totals?.coverageEndDate).toBeNull();
   });
 
-  it("throws FecApiError on non-2xx response", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({}, false, 429));
+  it("throws FecApiError on persistent non-2xx response", async () => {
+    // fecFetch retries once on 429 — both attempts must return 429 for the
+    // error to bubble up.
+    mockFetch.mockResolvedValue(jsonResponse({}, false, 429));
     try {
       await getCandidateTotals("X", 2026);
       throw new Error("expected to throw");
@@ -102,6 +104,19 @@ describe("getCandidateTotals", () => {
       expect(e).toBeInstanceOf(FecApiError);
       expect((e as FecApiError).status).toBe(429);
     }
+  });
+
+  it("retries once on 429 and succeeds when the retry returns 2xx", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({}, false, 429))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          results: [{ candidate_id: "X", cycle: 2026, receipts: 1234 }],
+        })
+      );
+    const totals = await getCandidateTotals("X", 2026);
+    expect(totals?.receipts).toBe(1234);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it("throws when FEC_API_KEY is missing", async () => {

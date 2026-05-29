@@ -58,6 +58,7 @@ const samplePayload: MemberFinance = {
   totals: sampleTotals,
   topIndividuals: sampleIndividuals,
   topPacs: samplePacs,
+  outsideSpending: null,
 };
 
 beforeEach(() => {
@@ -111,7 +112,12 @@ describe("loadCachedFinance", () => {
 
   it("caches negative results so we don't keep hammering the API", async () => {
     const store = makeMemoryStore();
-    const empty: MemberFinance = { totals: null, topIndividuals: [], topPacs: [] };
+    const empty: MemberFinance = {
+      totals: null,
+      topIndividuals: [],
+      topPacs: [],
+      outsideSpending: null,
+    };
     const { fetcher, fn } = makeFetcher(empty);
 
     await loadCachedFinance("X000001", "X1XX00001", 2026, store, fetcher);

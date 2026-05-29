@@ -13,7 +13,12 @@ import LegislatorCrosswalk from "@/models/LegislatorCrosswalk";
 import { fetchMemberDetail } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import { getTrendingBills } from "@/lib/trending";
-import { currentCycle, type CandidateTotals, type ContributorAggregate } from "@/lib/fec";
+import {
+  currentCycle,
+  type CandidateTotals,
+  type ContributorAggregate,
+  type OutsideSpending,
+} from "@/lib/fec";
 import {
   loadCachedFinance,
   mongoFinanceStore,
@@ -77,6 +82,7 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
   let financeTotals: CandidateTotals | null = null;
   let financeIndividuals: ContributorAggregate[] = [];
   let financePacs: ContributorAggregate[] = [];
+  let financeOutside: OutsideSpending | null = null;
   let opensecretsId: string | undefined;
   const crosswalk = await LegislatorCrosswalk.findOne({ bioguideId }).lean();
   if (crosswalk) {
@@ -94,6 +100,7 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         financeTotals = finance.totals;
         financeIndividuals = finance.topIndividuals;
         financePacs = finance.topPacs;
+        financeOutside = finance.outsideSpending;
       } catch (e) {
         console.error(
           "FEC lookup failed for",
@@ -216,6 +223,7 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         totals={financeTotals}
         topIndividuals={financeIndividuals}
         topPacs={financePacs}
+        outsideSpending={financeOutside}
         opensecretsId={opensecretsId}
         memberName={detail.name}
       />

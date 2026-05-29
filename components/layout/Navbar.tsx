@@ -42,6 +42,7 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
   const navLinks = [
     { href: "/bills", label: "Bills" },
     { href: "/members", label: "Members" },
+    { href: "/elections", label: "Elections" },
     { href: "/how-it-works", label: "How It Works" },
     { href: "/feed", label: "Feed" },
   ];

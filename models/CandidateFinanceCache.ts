@@ -1,12 +1,9 @@
-// models/FecCache.ts
+// models/CandidateFinanceCache.ts
 //
-// Caches OpenFEC API responses by (bioguideId, cycle) with a 24-hour TTL.
-// Mongo's TTL index auto-deletes expired documents in the background, so we
-// also store fetchedAt for an explicit freshness check (defense in depth).
-//
-// One document per member per cycle holds all three responses we fetch on a
-// member profile load: candidate totals, top individual contributions, and
-// top PAC contributions.
+// Caches OpenFEC finance responses keyed by (fecId, cycle). Parallel to
+// FecCache (which is keyed by bioguideId). The elections feature works with
+// challengers who have no bioguide ID, so it caches against the FEC candidate
+// ID directly. Same 24h TTL + Mongo TTL index pattern as FecCache.
 import mongoose, { Document, Model, Schema } from "mongoose";
 import type {
   CandidateTotals,
@@ -14,13 +11,20 @@ import type {
   OutsideSpending,
 } from "@/lib/fec";
 
-export interface IFecCache extends Document {
-  bioguideId: string;
+export interface ICandidateFinanceCache extends Document {
+  fecId: string;
   cycle: number;
   totals: CandidateTotals | null;
   topIndividuals: ContributorAggregate[];
   topPacs: ContributorAggregate[];
   outsideSpending: OutsideSpending | null;
+  /**
+   * true when the row was populated via the full fetcher (totals + top
+   * individuals + top PACs + outside spending). false when only totals were
+   * fetched — race list pages do this to stay under the FEC rate limit.
+   * The candidate detail page treats hasFullDetails:false as a miss.
+   */
+  hasFullDetails: boolean;
   fetchedAt: Date;
   expiresAt: Date;
 }
@@ -40,10 +44,7 @@ const CandidateTotalsSubSchema = new Schema(
 );
 
 const ContributorAggregateSubSchema = new Schema(
-  {
-    contributor: String,
-    amount: Number,
-  },
+  { contributor: String, amount: Number },
   { _id: false }
 );
 
@@ -62,25 +63,26 @@ const OutsideSpendingSubSchema = new Schema(
   { _id: false }
 );
 
-const FecCacheSchema = new Schema<IFecCache>({
-  bioguideId: { type: String, required: true },
+const CandidateFinanceCacheSchema = new Schema<ICandidateFinanceCache>({
+  fecId: { type: String, required: true },
   cycle: { type: Number, required: true },
   totals: { type: CandidateTotalsSubSchema, default: null },
   topIndividuals: { type: [ContributorAggregateSubSchema], default: [] },
   topPacs: { type: [ContributorAggregateSubSchema], default: [] },
   outsideSpending: { type: OutsideSpendingSubSchema, default: null },
+  hasFullDetails: { type: Boolean, default: false },
   fetchedAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
 });
 
-// Composite unique index for one cache row per member per cycle
-FecCacheSchema.index({ bioguideId: 1, cycle: 1 }, { unique: true });
+CandidateFinanceCacheSchema.index({ fecId: 1, cycle: 1 }, { unique: true });
+CandidateFinanceCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
-// Mongo TTL index — documents are auto-removed when expiresAt is in the past.
-// expireAfterSeconds: 0 means "delete as soon as expiresAt has passed."
-FecCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const CandidateFinanceCache: Model<ICandidateFinanceCache> =
+  mongoose.models.CandidateFinanceCache ||
+  mongoose.model<ICandidateFinanceCache>(
+    "CandidateFinanceCache",
+    CandidateFinanceCacheSchema
+  );
 
-const FecCache: Model<IFecCache> =
-  mongoose.models.FecCache || mongoose.model<IFecCache>("FecCache", FecCacheSchema);
-
-export default FecCache;
+export default CandidateFinanceCache;
