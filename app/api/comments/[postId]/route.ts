@@ -28,7 +28,7 @@ export async function POST(
     const newComment = await Comment.create({
       comment: comment.trim(),
       likes: 0,
-      post: postId,
+      proposal: postId,
     });
 
     return NextResponse.json({ comment: newComment }, { status: 201 });

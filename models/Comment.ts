@@ -3,7 +3,7 @@ import mongoose, { Document, Model, Schema, Types } from "mongoose";
 export interface IComment extends Document {
   comment: string;
   likes: number;
-  post: Types.ObjectId;
+  proposal: Types.ObjectId;
   createdAt: Date;
 }
 
@@ -16,9 +16,9 @@ const CommentSchema = new Schema<IComment>({
     type: Number,
     required: true,
   },
-  post: {
+  proposal: {
     type: Schema.Types.ObjectId,
-    ref: "Post",
+    ref: "Proposal",
   },
   createdAt: {
     type: Date,
