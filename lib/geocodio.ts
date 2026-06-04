@@ -23,13 +23,15 @@ export async function lookupDistrict(zip: string): Promise<DistrictResult | null
 
   if (!state || cds.length === 0) return null;
 
-  const districts = cds.map((cd: any) => ({
-    number: cd.district_number,
-    proportion: cd.proportion,
-  }));
+  const districts: DistrictResult["districts"] = cds.map(
+    (cd: { district_number: number; proportion: number }) => ({
+      number: cd.district_number,
+      proportion: cd.proportion,
+    })
+  );
 
   // Sort by proportion descending
-  districts.sort((a: any, b: any) => b.proportion - a.proportion);
+  districts.sort((a, b) => b.proportion - a.proportion);
 
   return { state: state.toLowerCase(), districts };
 }

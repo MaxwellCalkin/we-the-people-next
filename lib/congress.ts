@@ -729,7 +729,7 @@ export async function fetchMemberDetail(
   const terms: { congress: number; chamber: string; startYear: number; endYear?: number }[] = [];
   let chamber = "";
   let state = "";
-  let district: number | undefined;
+  const district: number | undefined = m.district;
   let leadership: string | undefined;
 
   if (m.terms) {
@@ -748,7 +748,6 @@ export async function fetchMemberDetail(
   }
 
   state = m.state || "";
-  district = m.district;
 
   if (m.leadership && m.leadership.length > 0) {
     const current = m.leadership.find((l: { current?: boolean }) => l.current);
