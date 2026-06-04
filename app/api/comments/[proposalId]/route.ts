@@ -5,7 +5,7 @@ import Comment from "@/models/Comment";
 
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ postId: string }> }
+  { params }: { params: Promise<{ proposalId: string }> }
 ) {
   try {
     const session = await auth();
@@ -14,7 +14,7 @@ export async function POST(
     }
 
     await connectDB();
-    const { postId } = await params;
+    const { proposalId } = await params;
     const body = await request.json();
     const { comment } = body;
 
@@ -28,7 +28,7 @@ export async function POST(
     const newComment = await Comment.create({
       comment: comment.trim(),
       likes: 0,
-      proposal: postId,
+      proposal: proposalId,
     });
 
     return NextResponse.json({ comment: newComment }, { status: 201 });
