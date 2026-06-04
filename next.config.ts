@@ -17,6 +17,15 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        source: "/feed",
+        destination: "/proposals",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

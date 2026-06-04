@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import GlassCard from "@/components/ui/GlassCard";
-import PostCard from "@/components/features/PostCard";
+import ProposalCard from "@/components/features/ProposalCard";
 import Link from "next/link";
 
 interface VoteEntry {
@@ -15,21 +15,21 @@ interface VoteEntry {
   position: "Yea" | "Nay";
 }
 
-interface PostEntry {
+interface ProposalEntry {
   _id: string;
   title: string;
-  image: string;
-  caption: string;
-  likes: number;
+  image?: string;
+  description: string;
+  upvoteCount: number;
 }
 
 interface ProfileTabsProps {
   votes: VoteEntry[];
-  posts: PostEntry[];
+  proposals: ProposalEntry[];
 }
 
-export default function ProfileTabs({ votes, posts }: ProfileTabsProps) {
-  const [activeTab, setActiveTab] = useState<"votes" | "posts">("votes");
+export default function ProfileTabs({ votes, proposals }: ProfileTabsProps) {
+  const [activeTab, setActiveTab] = useState<"votes" | "proposals">("votes");
 
   return (
     <div>
@@ -49,15 +49,15 @@ export default function ProfileTabs({ votes, posts }: ProfileTabsProps) {
           )}
         </button>
         <button
-          onClick={() => setActiveTab("posts")}
+          onClick={() => setActiveTab("proposals")}
           className={`pb-3 text-sm font-semibold transition-colors relative ${
-            activeTab === "posts"
+            activeTab === "proposals"
               ? "text-gold"
               : "text-cream/50 hover:text-cream"
           }`}
         >
-          Posts ({posts.length})
-          {activeTab === "posts" && (
+          Proposals ({proposals.length})
+          {activeTab === "proposals" && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold rounded-full" />
           )}
         </button>
@@ -104,17 +104,17 @@ export default function ProfileTabs({ votes, posts }: ProfileTabsProps) {
         </div>
       )}
 
-      {/* Posts Tab */}
-      {activeTab === "posts" && (
+      {/* Proposals Tab */}
+      {activeTab === "proposals" && (
         <div>
-          {posts.length === 0 ? (
+          {proposals.length === 0 ? (
             <p className="text-cream/40 text-sm">
-              You haven&apos;t created any posts yet.
+              You haven&apos;t created any proposals yet.
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {posts.map((post) => (
-                <PostCard key={post._id} post={post} />
+              {proposals.map((proposal) => (
+                <ProposalCard key={proposal._id} proposal={proposal} />
               ))}
             </div>
           )}

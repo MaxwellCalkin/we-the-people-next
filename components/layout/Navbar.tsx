@@ -44,7 +44,7 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
     { href: "/members", label: "Members" },
     { href: "/elections", label: "Elections" },
     { href: "/how-it-works", label: "How It Works" },
-    { href: "/feed", label: "Feed" },
+    { href: "/proposals", label: "Proposals" },
   ];
 
   return (
@@ -79,6 +79,13 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
 
             {/* Search + Avatar Menu (Desktop) */}
             <div className="hidden md:flex items-center gap-4">
+              <Link
+                href="/proposals/new"
+                className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold hover:bg-gold/20 transition-colors"
+              >
+                Propose
+              </Link>
+
               <SearchBar className="w-52" />
 
               {/* Avatar dropdown */}
@@ -173,6 +180,13 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
                 className="text-cream/80 hover:text-gold transition-colors text-lg"
               >
                 Profile
+              </Link>
+              <Link
+                href="/proposals/new"
+                onClick={() => setMobileOpen(false)}
+                className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-center text-base font-medium text-gold hover:bg-gold/20 transition-colors"
+              >
+                Propose
               </Link>
             </div>
 

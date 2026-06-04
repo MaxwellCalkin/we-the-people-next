@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
-import Post from "@/models/Post";
+import Proposal from "@/models/Proposal";
 import Bill from "@/models/Bill";
 import { fetchMembers } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
@@ -59,17 +59,17 @@ export default async function ProfilePage() {
     })
   );
 
-  // Fetch user's posts
-  const posts = await Post.find({ user: session.user.id })
+  // Fetch user's proposals
+  const proposals = await Proposal.find({ user: session.user.id })
     .sort({ createdAt: -1 })
     .lean();
 
-  const serializedPosts = posts.map((p) => ({
+  const serializedProposals = proposals.map((p) => ({
     _id: p._id.toString(),
     title: p.title,
     image: p.image,
-    caption: p.caption,
-    likes: p.likes,
+    description: p.description,
+    upvoteCount: p.upvoteCount,
   }));
 
   // Fetch user's voted bills
@@ -117,7 +117,7 @@ export default async function ProfilePage() {
         reps={reps}
       />
 
-      <ProfileTabs votes={votes} posts={serializedPosts} />
+      <ProfileTabs votes={votes} proposals={serializedProposals} />
     </div>
   );
 }
