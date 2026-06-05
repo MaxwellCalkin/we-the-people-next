@@ -10,11 +10,9 @@ import {
   getMemberVoteOnBill,
   parseBillSlug,
 } from "@/lib/congress";
-import Post from "@/models/Post";
 import GlassCard from "@/components/ui/GlassCard";
 import VoteStats from "@/components/features/VoteStats";
 import RepVoteDisplay from "@/components/features/RepVoteDisplay";
-import MagneticButton from "@/components/ui/MagneticButton";
 import { ExternalLink, Users, FileText } from "lucide-react";
 
 interface VotedPageProps {
@@ -33,15 +31,14 @@ export default async function VotedPage({ params }: VotedPageProps) {
   const parsed = parseBillSlug(slug);
 
   // Fan out all independent I/O concurrently. Previously this page did
-  // ~6 sequential awaits (bill → senators → 2× senator votes → house reps →
-  // house vote → post), which made cold loads feel slow. None of these
-  // actually depend on each other: the bill fetch only gates redirect, and
-  // rep-vote lookups are keyed off the URL slug, not the bill response.
-  const [bill, allStateMembers, houseReps, existingPost] = await Promise.all([
+  // ~5 sequential awaits (bill → senators → 2× senator votes → house reps →
+  // house vote), which made cold loads feel slow. None of these actually
+  // depend on each other: the bill fetch only gates redirect, and rep-vote
+  // lookups are keyed off the URL slug, not the bill response.
+  const [bill, allStateMembers, houseReps] = await Promise.all([
     fetchBillDetails(congress, slug),
     fetchMembers(userState),
     fetchMembers(userState, userCd),
-    Post.findOne({ user: session.user.id, billSlug: slug }).lean(),
   ]);
 
   if (!bill) redirect("/bills");
@@ -181,66 +178,18 @@ export default async function VotedPage({ params }: VotedPageProps) {
         </div>
       </GlassCard>
 
-      {/* Post CTA */}
+      {/* Propose a Bill CTA */}
       <GlassCard className="text-center">
-        {existingPost ? (
-          <div>
-            <p className="text-cream/70 mb-4">
-              You already have a post for this bill.
-            </p>
-            <MagneticButton
-              href={`/post/${String(existingPost._id)}`}
-            >
-              View Your Post
-            </MagneticButton>
-          </div>
-        ) : (
-          <div>
-            <p className="text-cream/70 mb-4">
-              Share your thoughts on this bill with the community!
-            </p>
-            <MagneticButton
-              href={`/vote/${slug}/${congress}/voted?createPost=true`}
-            >
-              Create a Post
-            </MagneticButton>
-          </div>
-        )}
+        <p className="text-cream/70">
+          Have an idea?{" "}
+          <Link
+            href="/proposals/new"
+            className="text-gold font-medium hover:text-gold/80 transition-colors"
+          >
+            Propose a bill &rarr;
+          </Link>
+        </p>
       </GlassCard>
-
-      {/* Inline Create Post Form */}
-      <CreatePostSection billSlug={slug} billCongress={congress} />
     </div>
   );
-}
-
-// This is a wrapper that conditionally shows the form based on URL param
-// Since this needs client interactivity, we import the form as a client component
-import CreatePostForm from "@/components/features/CreatePostForm";
-
-async function CreatePostSection({
-  billSlug,
-  billCongress,
-}: {
-  billSlug: string;
-  billCongress: string;
-}) {
-  return (
-    <div id="create-post">
-      <CreatePostInlineWrapper
-        billSlug={billSlug}
-        billCongress={billCongress}
-      />
-    </div>
-  );
-}
-
-function CreatePostInlineWrapper({
-  billSlug,
-  billCongress,
-}: {
-  billSlug: string;
-  billCongress: string;
-}) {
-  return <CreatePostForm billSlug={billSlug} billCongress={billCongress} />;
 }

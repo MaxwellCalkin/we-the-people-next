@@ -12,12 +12,12 @@ interface CommentData {
 }
 
 interface CommentSectionProps {
-  postId: string;
+  proposalId: string;
   initialComments: CommentData[];
 }
 
 export default function CommentSection({
-  postId,
+  proposalId,
   initialComments,
 }: CommentSectionProps) {
   const [comments, setComments] = useState<CommentData[]>(initialComments);
@@ -30,7 +30,7 @@ export default function CommentSection({
 
     setLoading(true);
     try {
-      const res = await fetch(`/api/comments/${postId}`, {
+      const res = await fetch(`/api/comments/${proposalId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: newComment.trim() }),

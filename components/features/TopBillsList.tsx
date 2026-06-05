@@ -19,16 +19,29 @@ interface TopBillsListProps {
 
 export default function TopBillsList({ userVotedSlugs }: TopBillsListProps) {
   const [bills, setBills] = useState<TopBill[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedPeriod, setLoadedPeriod] = useState<Period | null>(null);
   const [period, setPeriod] = useState<Period>("week");
 
+  // Loading while the currently selected period has not yet been fetched.
+  const loading = loadedPeriod !== period;
+
   useEffect(() => {
-    setLoading(true);
+    let ignore = false;
     fetch(`/api/bills/top?period=${period}`)
       .then((r) => r.json())
-      .then((data) => setBills(data.bills || []))
-      .catch((err) => console.error("Failed to fetch top bills:", err))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (ignore) return;
+        setBills(data.bills || []);
+        setLoadedPeriod(period);
+      })
+      .catch((err) => {
+        if (ignore) return;
+        console.error("Failed to fetch top bills:", err);
+        setLoadedPeriod(period);
+      });
+    return () => {
+      ignore = true;
+    };
   }, [period]);
 
   const periodLabels: Record<Period, string> = {

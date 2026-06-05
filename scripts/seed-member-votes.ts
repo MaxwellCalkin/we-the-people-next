@@ -79,7 +79,7 @@ const MemberScoreModel =
   mongoose.model("MemberScore", MemberScoreSchema);
 
 // Map senator last names to bioguide IDs (built from MemberScore collection)
-let senatorNameMap: Map<string, string> = new Map();
+const senatorNameMap: Map<string, string> = new Map();
 
 async function buildSenatorNameMap(): Promise<void> {
   const senators = await MemberScoreModel.find({ chamber: "Senate" }).lean();
