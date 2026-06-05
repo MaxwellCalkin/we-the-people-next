@@ -83,7 +83,7 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
                 href="/proposals/new"
                 className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold hover:bg-gold/20 transition-colors"
               >
-                Propose
+                Propose a Bill
               </Link>
 
               <SearchBar className="w-52" />
@@ -186,7 +186,7 @@ export default function Navbar({ userName, userImage }: NavbarProps) {
                 onClick={() => setMobileOpen(false)}
                 className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-center text-base font-medium text-gold hover:bg-gold/20 transition-colors"
               >
-                Propose
+                Propose a Bill
               </Link>
             </div>
 
