@@ -29,3 +29,13 @@ export function districtKey(state: string, cd: string): string {
   const num = Number.isFinite(n) ? String(n).padStart(2, "0") : "00";
   return `${s}-${num}`;
 }
+
+/**
+ * True if a 4-digit congressional-district GEOID (2-digit state FIPS + 2-digit
+ * district) belongs to the given state abbreviation. Used to filter the CD
+ * topojson down to a single state on drill-in.
+ */
+export function isDistrictInState(geoId: string, stateAbbr: string): boolean {
+  const fips = stateToFips(stateAbbr);
+  return !!fips && String(geoId).slice(0, 2) === fips;
+}

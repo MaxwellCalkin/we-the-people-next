@@ -107,6 +107,8 @@ export default async function ProposalPage({ params }: ProposalPageProps) {
           byDistrict={proposal.upvotesByDistrict}
           totalUpvotes={proposal.upvoteCount}
           districtsAvailable={true}
+          viewerState={session?.user?.state}
+          viewerDistrict={session?.user?.cd}
         />
       </GlassCard>
 

@@ -1,6 +1,6 @@
 // lib/__tests__/usGeo.test.ts
 import { describe, it, expect } from "vitest";
-import { districtKey, stateToFips, fipsToState } from "../usGeo";
+import { districtKey, stateToFips, fipsToState, isDistrictInState } from "../usGeo";
 
 describe("usGeo", () => {
   it("builds a district key from state abbr + cd", () => {
@@ -15,5 +15,11 @@ describe("usGeo", () => {
     expect(stateToFips("CA")).toBe("06");
     expect(fipsToState("06")).toBe("CA");
     expect(stateToFips("ZZ")).toBeUndefined();
+  });
+  it("matches a district GEOID to its state by FIPS prefix", () => {
+    expect(isDistrictInState("0612", "CA")).toBe(true); // 06 = CA, district 12
+    expect(isDistrictInState("4801", "TX")).toBe(true); // 48 = TX, district 01
+    expect(isDistrictInState("0612", "TX")).toBe(false);
+    expect(isDistrictInState("0612", "zz")).toBe(false); // unknown state
   });
 });
