@@ -13,6 +13,9 @@ import {
   toggleUpvote,
   deleteProposal,
 } from "@/lib/proposals";
+import { setupTestMongo } from "@/test/mongo";
+
+setupTestMongo();
 
 let alice: string, bob: string;
 

@@ -10,6 +10,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import connectDB from "@/lib/db";
 import Proposal from "@/models/Proposal";
 import User from "@/models/User";
+import { setupTestMongo } from "@/test/mongo";
+
+setupTestMongo();
 
 const authMock = vi.fn();
 vi.mock("@/lib/auth", () => ({ auth: () => authMock() }));
