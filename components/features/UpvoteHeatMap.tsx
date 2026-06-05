@@ -7,6 +7,7 @@ import { select } from "d3-selection";
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type D3ZoomEvent } from "d3-zoom";
 import { ArrowLeft, Plus, Minus, RotateCcw, MapPin } from "lucide-react";
 import { fipsToState, stateToFips, districtKey, isDistrictInState } from "@/lib/usGeo";
+import { getStateInfo } from "@/lib/states";
 
 const W = 960;
 const H = 600;
@@ -17,6 +18,7 @@ const MIN_TO_MAP = 3;
 type Topo = any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type GeoFeature = { id?: string | number;[k: string]: any };
+type Tooltip = { x: number; y: number; title: string; sub: string };
 
 interface Props {
   byState: Record<string, number>;
@@ -51,6 +53,8 @@ function geoIdToKey(geoId: string | number): string {
   return `${abbr}-${num}`;
 }
 
+const upvoteText = (v: number) => `${v} upvote${v === 1 ? "" : "s"}`;
+
 export default function UpvoteHeatMap({
   byState,
   byDistrict,
@@ -69,8 +73,10 @@ export default function UpvoteHeatMap({
   const [view, setView] = useState<"national" | "state">("national");
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [transform, setTransform] = useState({ k: 1, x: 0, y: 0 });
+  const [tip, setTip] = useState<Tooltip | null>(null);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const zoomRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const viewRef = useRef<"national" | "state">("national");
 
@@ -158,6 +164,14 @@ export default function UpvoteHeatMap({
   const fillFor = (v: number, max: number) =>
     v <= 0 ? "rgba(255,255,255,0.05)" : `rgba(212,175,55,${(0.15 + 0.85 * (v / max)).toFixed(3)})`;
 
+  // Cursor-following tooltip positioned relative to the map wrapper.
+  const showTip = (e: { clientX: number; clientY: number }, title: string, sub: string) => {
+    const rect = wrapRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setTip({ x: e.clientX - rect.left, y: e.clientY - rect.top, title, sub });
+  };
+  const hideTip = () => setTip(null);
+
   function applyTransform(t: { k: number; x: number; y: number }) {
     if (svgRef.current && zoomRef.current) {
       select(svgRef.current).call(zoomRef.current.transform, t as never);
@@ -184,6 +198,7 @@ export default function UpvoteHeatMap({
     viewRef.current = "state";
     setView("state");
     setSelectedState(abbr);
+    setTip(null);
     applyTransform(fitTransformFor(abbr));
   }
 
@@ -191,6 +206,7 @@ export default function UpvoteHeatMap({
     viewRef.current = "national";
     setView("national");
     setSelectedState(null);
+    setTip(null);
     applyTransform(zoomIdentity);
   }
 
@@ -263,76 +279,101 @@ export default function UpvoteHeatMap({
         )}
       </div>
 
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto select-none"
-        role="img"
-        aria-label={view === "national" ? "Upvotes by state" : `Upvotes by district in ${selectedState}`}
-        style={{ cursor: view === "state" ? "grab" : "default", touchAction: "none" }}
-      >
-        <g transform={g}>
-          {view === "national"
-            ? stateFeatures.map((f) => {
-                const v = valueForState(f.id!);
-                const abbr = fipsToState(String(f.id).slice(0, 2));
-                return (
-                  <path
-                    key={String(f.id)}
-                    d={path ? path(f as never) || "" : ""}
-                    fill={fillFor(v, stateMax)}
-                    stroke="rgba(255,255,255,0.15)"
-                    strokeWidth={0.5 / transform.k}
-                    style={{ cursor: districtsAvailable ? "pointer" : "default" }}
-                    onClick={() => abbr && drillTo(abbr)}
-                  >
-                    <title>{abbr}{v ? ` — ${v} upvotes` : " — no upvotes"}</title>
-                  </path>
-                );
-              })
-            : districtFeatures.map((f) => {
-                const v = valueForDistrict(f.id!);
-                return (
-                  <path
-                    key={String(f.id)}
-                    d={path ? path(f as never) || "" : ""}
-                    fill={fillFor(v, districtMax)}
-                    stroke="rgba(255,255,255,0.18)"
-                    strokeWidth={0.5 / transform.k}
-                  >
-                    <title>{geoIdToKey(f.id!)}{v ? ` — ${v} upvotes` : " — no upvotes"}</title>
-                  </path>
-                );
-              })}
+      <div ref={wrapRef} className="relative">
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${W} ${H}`}
+          className="w-full h-auto select-none"
+          role="img"
+          aria-label={view === "national" ? "Upvotes by state" : `Upvotes by district in ${selectedState}`}
+          style={{ cursor: view === "state" ? "grab" : "default", touchAction: "none" }}
+          onMouseLeave={hideTip}
+        >
+          <g transform={g}>
+            {view === "national"
+              ? stateFeatures.map((f) => {
+                  const v = valueForState(f.id!);
+                  const abbr = fipsToState(String(f.id).slice(0, 2));
+                  const name = (abbr && getStateInfo(abbr)?.name) || abbr || "Unknown";
+                  return (
+                    <path
+                      key={String(f.id)}
+                      d={path ? path(f as never) || "" : ""}
+                      fill={fillFor(v, stateMax)}
+                      stroke="rgba(255,255,255,0.15)"
+                      strokeWidth={0.5 / transform.k}
+                      style={{ cursor: districtsAvailable ? "pointer" : "default" }}
+                      onClick={() => abbr && drillTo(abbr)}
+                      onMouseEnter={(e) => showTip(e, name, upvoteText(v))}
+                      onMouseMove={(e) => showTip(e, name, upvoteText(v))}
+                    />
+                  );
+                })
+              : districtFeatures.map((f) => {
+                  const v = valueForDistrict(f.id!);
+                  const key = geoIdToKey(f.id!);
+                  return (
+                    <path
+                      key={String(f.id)}
+                      d={path ? path(f as never) || "" : ""}
+                      fill={fillFor(v, districtMax)}
+                      stroke="rgba(255,255,255,0.18)"
+                      strokeWidth={0.5 / transform.k}
+                      onMouseEnter={(e) => showTip(e, key, upvoteText(v))}
+                      onMouseMove={(e) => showTip(e, key, upvoteText(v))}
+                    />
+                  );
+                })}
 
-          {/* Emphasize the viewer's district on top so its outline isn't covered */}
-          {mineFeature && (
-            <path
-              d={path ? path(mineFeature as never) || "" : ""}
-              fill="none"
-              stroke="#D4AF37"
-              strokeWidth={2.4 / transform.k}
-              pointerEvents="none"
-            />
-          )}
-          {mineCentroid && !Number.isNaN(mineCentroid[0]) && (
-            <g transform={`translate(${mineCentroid[0]},${mineCentroid[1]})`} pointerEvents="none">
-              <circle r={3 / transform.k} fill="#D4AF37" />
-              <text
-                y={-7 / transform.k}
-                textAnchor="middle"
-                fontSize={13 / transform.k}
-                fill="#F5E6C8"
-                stroke="rgba(10,14,26,0.85)"
-                strokeWidth={3.5 / transform.k}
-                style={{ paintOrder: "stroke", fontWeight: 600 }}
-              >
-                You
-              </text>
-            </g>
-          )}
-        </g>
-      </svg>
+            {/* Emphasize the viewer's district on top so its outline isn't covered */}
+            {mineFeature && (
+              <path
+                d={path ? path(mineFeature as never) || "" : ""}
+                fill="none"
+                stroke="#D4AF37"
+                strokeWidth={2.4 / transform.k}
+                pointerEvents="none"
+              />
+            )}
+            {mineCentroid && !Number.isNaN(mineCentroid[0]) && (
+              <g transform={`translate(${mineCentroid[0]},${mineCentroid[1]})`} pointerEvents="none">
+                <circle r={3 / transform.k} fill="#D4AF37" />
+                <text
+                  y={-7 / transform.k}
+                  textAnchor="middle"
+                  fontSize={13 / transform.k}
+                  fill="#F5E6C8"
+                  stroke="rgba(10,14,26,0.85)"
+                  strokeWidth={3.5 / transform.k}
+                  style={{ paintOrder: "stroke", fontWeight: 600 }}
+                >
+                  You
+                </text>
+              </g>
+            )}
+          </g>
+        </svg>
+
+        {tip && (
+          <div
+            className="pointer-events-none absolute z-10 rounded-md px-2.5 py-1.5 text-xs shadow-lg"
+            style={{
+              left: tip.x,
+              top: tip.y,
+              transform: "translate(-50%, calc(-100% - 12px))",
+              backgroundColor: "rgba(10,14,26,0.96)",
+              border: "1px solid rgba(255,255,255,0.12)",
+            }}
+          >
+            <div className="font-semibold whitespace-nowrap" style={{ color: "#F5E6C8" }}>
+              {tip.title}
+            </div>
+            <div className="whitespace-nowrap" style={{ color: "#D4AF37" }}>
+              {tip.sub}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
