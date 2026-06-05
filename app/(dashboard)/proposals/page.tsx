@@ -38,15 +38,13 @@ export default async function ProposalsPage({ searchParams }: ProposalsPageProps
       : undefined;
   const viewerDistrict = session?.user?.cd || undefined;
 
-  // Resolve scope. An explicit URL value wins; otherwise default to the
-  // viewer's narrowest known location (district > state > global).
+  // Resolve scope. An explicit URL value wins; otherwise default to Global
+  // (nationwide) — most useful while volume is still building, since a viewer's
+  // own district is often empty early on. The controls still pre-select the
+  // viewer's own state/district when they narrow down (browse-friendly).
   let scope: Scope;
   if (params.scope === "global" || params.scope === "state" || params.scope === "district") {
     scope = params.scope;
-  } else if (viewerState && viewerDistrict) {
-    scope = "district";
-  } else if (viewerState) {
-    scope = "state";
   } else {
     scope = "global";
   }
