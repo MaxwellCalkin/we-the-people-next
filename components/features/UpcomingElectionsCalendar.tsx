@@ -14,6 +14,8 @@ import type { ElectionDate, ElectionType, FecOffice } from "@/lib/fec";
 
 interface UpcomingElectionsCalendarProps {
   dates: ElectionDate[];
+  /** The source could not be loaded; do not confuse this with no dates. */
+  unavailable?: boolean;
   /** Max number of grouped rows to show. */
   limit?: number;
   /** Highlight rows for this state (the user's). */
@@ -61,14 +63,19 @@ function groupKey(d: ElectionDate): string {
   return [d.date, d.state ?? "_", d.type, d.party ?? "_"].join("|");
 }
 
+// FEC election dates are calendar dates, not instants in the viewer's timezone.
+function calendarDate(iso: string): Date {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`);
+}
+
 function formatShortDate(iso: string): string {
-  const d = new Date(iso);
+  const d = calendarDate(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatDayOfWeek(iso: string): string {
-  const d = new Date(iso);
+  const d = calendarDate(iso);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { weekday: "short" });
 }
@@ -122,10 +129,11 @@ function buildLabel(g: GroupedElection): {
 
 export default function UpcomingElectionsCalendar({
   dates,
+  unavailable = false,
   limit = 6,
   highlightState,
   now = new Date(),
-  title = "Upcoming Federal Elections",
+  title = "Upcoming federal election dates",
   subtitle,
   viewAllHref,
   viewAllLabel = "View full calendar",
@@ -138,7 +146,7 @@ export default function UpcomingElectionsCalendar({
   ).getTime();
 
   const upcoming = dates.filter((d) => {
-    const t = new Date(d.date).getTime();
+    const t = calendarDate(d.date).getTime();
     return !isNaN(t) && t >= startMs;
   });
 
@@ -168,8 +176,6 @@ export default function UpcomingElectionsCalendar({
   const visible = limit ? sorted.slice(0, limit) : sorted;
   const truncated = sorted.length > visible.length;
 
-  if (visible.length === 0) return null;
-
   const highlightUpper = highlightState?.toUpperCase() ?? null;
 
   const renderRow = (g: GroupedElection, key: string) => {
@@ -185,7 +191,7 @@ export default function UpcomingElectionsCalendar({
               <div className="text-cream font-medium text-sm tabular-nums">
                 {formatShortDate(g.date)}
               </div>
-              <div className="text-cream/40 text-[0.65rem] uppercase tracking-wider">
+              <div className="text-cream/70 text-xs uppercase tracking-wider">
                 {formatDayOfWeek(g.date)}
               </div>
             </div>
@@ -193,12 +199,12 @@ export default function UpcomingElectionsCalendar({
               <p className="text-cream text-sm capitalize">
                 {scope}
                 {isUser && (
-                  <span className="ml-2 text-[0.55rem] uppercase tracking-widest text-gold border border-gold/40 rounded px-1.5 py-0.5 align-middle">
+                  <span className="ml-2 text-xs uppercase tracking-wider text-gold border border-gold/40 rounded px-1.5 py-0.5 align-middle">
                     Your state
                   </span>
                 )}
               </p>
-              <p className="text-cream/45 text-xs mt-0.5">{what}</p>
+              <p className="text-cream/75 text-sm mt-0.5">{what}</p>
             </div>
             <ChevronRight className="h-4 w-4 text-cream/30 shrink-0 mt-0.5" />
           </div>
@@ -220,7 +226,7 @@ export default function UpcomingElectionsCalendar({
     }
     listChildren = [...byMonth.entries()].map(([monthKey, entries]) => (
       <li key={monthKey}>
-        <h3 className="text-[0.65rem] uppercase tracking-widest text-cream/50 mt-4 mb-1 first:mt-0">
+        <h3 className="text-xs uppercase tracking-widest text-cream/75 mt-4 mb-1 first:mt-0">
           {monthLabel(monthKey)}
         </h3>
         <ul className="divide-y divide-white/5">
@@ -250,11 +256,23 @@ export default function UpcomingElectionsCalendar({
         ) : (
           <h2 className="font-brand text-lg text-cream">{title}</h2>
         )}
-        <span className="text-cream/40 text-xs shrink-0">Source: FEC</span>
+        <span className="text-cream/70 text-xs shrink-0">Source: FEC</span>
       </div>
       {subtitle && (
-        <p className="text-cream/40 text-xs mb-3 leading-relaxed">
+        <p className="text-cream/75 text-sm mb-3 leading-relaxed">
           {subtitle}
+        </p>
+      )}
+      {unavailable && (
+        <p role="status" className="text-cream/80 text-sm my-3 leading-relaxed">
+          Some election dates could not be loaded. The list may be incomplete;
+          check your election office for confirmed dates.
+        </p>
+      )}
+      {visible.length === 0 && !unavailable && (
+        <p className="text-cream/75 text-sm my-3 leading-relaxed">
+          No upcoming dates were returned by the FEC for this selection.
+          State and local elections may still be scheduled.
         </p>
       )}
       <ul className={groupByMonth ? "" : "divide-y divide-white/5"}>

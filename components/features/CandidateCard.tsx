@@ -35,13 +35,13 @@ export default function CandidateCard({ candidate, totals }: CandidateCardProps)
                 {candidate.name}
               </h3>
               {isIncumbent && (
-                <span className="text-[0.6rem] uppercase tracking-widest text-gold border border-gold/40 rounded px-1.5 py-0.5">
+                <span className="text-xs uppercase tracking-wider text-gold border border-gold/40 rounded px-1.5 py-0.5">
                   Incumbent
                 </span>
               )}
             </div>
             {candidate.party && (
-              <p className="text-cream/50 text-xs mt-0.5">{candidate.party}</p>
+              <p className="text-cream/75 text-sm mt-0.5">{candidate.party}</p>
             )}
           </div>
         </div>
@@ -58,10 +58,11 @@ export default function CandidateCard({ candidate, totals }: CandidateCardProps)
         </div>
 
         {!totals && (
-          <p className="text-cream/35 text-[0.7rem] mt-3">
-            No FEC filings yet for this cycle.
+          <p className="text-cream/70 text-sm mt-3">
+            Finance totals are unavailable for this cycle.
           </p>
         )}
+        <p className="text-gold text-sm mt-4">Explore campaign finance →</p>
       </GlassCard>
     </Link>
   );
@@ -70,7 +71,7 @@ export default function CandidateCard({ candidate, totals }: CandidateCardProps)
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[0.6rem] uppercase tracking-widest text-cream/40">
+      <div className="text-xs uppercase tracking-wider text-cream/70">
         {label}
       </div>
       <div className="text-cream font-medium text-base mt-0.5 tabular-nums">

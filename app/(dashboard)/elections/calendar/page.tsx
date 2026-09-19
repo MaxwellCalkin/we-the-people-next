@@ -42,14 +42,17 @@ export default async function ElectionsCalendarPage({ searchParams }: PageProps)
   // elections, and the next presidential primaries — not just May–November
   // of one year.
   const years = [cycle, cycle + 1, cycle + 2];
-  const dateArrays = await Promise.all(
+  const dateResults = await Promise.allSettled(
     years.map((y) =>
       activeStateFilter
-        ? safeLoadDates(activeStateFilter, y)
-        : safeLoadDates("national", y)
+        ? loadElectionDates(activeStateFilter, y, mongoDatesStore, liveDatesFetcher)
+        : loadElectionDates("national", y, mongoDatesStore, liveDatesFetcher)
     )
   );
-  let dates: ElectionDate[] = dateArrays.flat();
+  let dates: ElectionDate[] = dateResults.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : []
+  );
+  const datesUnavailable = dateResults.some((result) => result.status === "rejected");
 
   // /election-dates/?election_state=XX should already constrain, but
   // defensively filter in case FEC returns nationwide rows mixed in.
@@ -62,19 +65,19 @@ export default async function ElectionsCalendarPage({ searchParams }: PageProps)
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <header>
-        <p className="text-cream/40 text-xs uppercase tracking-widest mb-1">
+        <p className="text-cream/70 text-xs uppercase tracking-widest mb-1">
           <Link href="/elections" className="hover:text-cream">
             Elections
           </Link>
         </p>
         <h1 className="font-brand text-3xl sm:text-4xl text-gradient">
-          Full Election Calendar
+          Federal Election Calendar
         </h1>
-        <p className="text-cream/50 text-sm mt-2 max-w-2xl">
-          Every federal primary, runoff, and general election from{" "}
-          {years[0]} through {years[years.length - 1]}. Click any row to jump
-          to that race&apos;s candidates and campaign finance. Years beyond the
-          current cycle may be sparse until FEC publishes them.
+        <p className="text-cream/75 text-sm mt-2 max-w-2xl leading-relaxed">
+          Federal dates published by the FEC for {years[0]} through {years[years.length - 1]}.
+          Open a date for related federal research. This calendar may be incomplete
+          and does not include state or local elections. Confirm dates and
+          eligibility with your election office.
         </p>
       </header>
 
@@ -90,18 +93,19 @@ export default async function ElectionsCalendarPage({ searchParams }: PageProps)
 
       <UpcomingElectionsCalendar
         dates={dates}
+        unavailable={datesUnavailable}
         limit={1000}
         highlightState={userState}
         groupByMonth
         title={
           activeStateFilter
             ? `Upcoming federal elections in ${stateName(activeStateFilter)}`
-            : "All upcoming federal elections"
+            : "Upcoming federal dates on file"
         }
         subtitle={
           activeStateFilter
-            ? `Only elections that affect ${stateName(activeStateFilter)} are shown. Clear the filter to see every state.`
-            : "Federal primary, runoff, and general election dates across all 50 states, D.C., and the territories."
+            ? `Dates listed for ${stateName(activeStateFilter)}. A statewide date may not apply to your address or primary eligibility.`
+            : "Federal primary, runoff, and general election dates by state. Coverage depends on the FEC records available."
         }
       />
     </div>
@@ -122,7 +126,7 @@ function CalendarFilterBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-cream/40 text-xs uppercase tracking-widest mr-1">
+      <span className="text-cream/70 text-xs uppercase tracking-widest mr-1">
         Show:
       </span>
       <FilterPill
@@ -144,11 +148,11 @@ function CalendarFilterBar({
           label={`Only ${stateName(explicitStateParam)}`}
         />
       )}
-      <span className="text-cream/35 text-xs hidden sm:inline">
+      <span className="text-cream/70 text-sm hidden sm:inline">
         or browse{" "}
         <Link
           href="/elections#browse"
-          className="text-gold/70 hover:text-gold underline"
+          className="text-gold hover:text-gold underline"
         >
           any state&apos;s page
         </Link>{" "}
@@ -179,18 +183,4 @@ function FilterPill({
       {label}
     </Link>
   );
-}
-
-async function safeLoadDates(scope: string, electionYear: number) {
-  try {
-    return await loadElectionDates(
-      scope,
-      electionYear,
-      mongoDatesStore,
-      liveDatesFetcher
-    );
-  } catch (e) {
-    console.error("Election dates lookup failed for", scope, electionYear, e);
-    return [];
-  }
 }

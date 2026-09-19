@@ -1,15 +1,7 @@
 // components/features/YourBallotCard.tsx
 //
-// Top-of-index hero for users whose state (and ideally CD) is known. Answers
-// the questions a politically-cold user is actually asking when they land on
-// /elections:
-//   1. When can I vote next?
-//   2. What's that election for, exactly?
-//   3. Who currently holds those seats?
-//
-// The "Next Election" block is itself a clickable card that drills into the
-// most specific race it can — straight to the House race detail page when the
-// upcoming date is for a House office, etc.
+// Profile-based federal research overview. A state and congressional district
+// do not establish an exact ballot or eligibility for a particular election.
 
 import Link from "next/link";
 import { Calendar, ChevronRight, MapPin } from "lucide-react";
@@ -50,7 +42,7 @@ const OFFICE_LABEL: Record<FecOffice, string> = {
 };
 
 function formatLongDate(iso: string): string {
-  const d = new Date(iso);
+  const d = calendarDate(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("en-US", {
     weekday: "long",
@@ -61,7 +53,7 @@ function formatLongDate(iso: string): string {
 }
 
 function daysFromNow(iso: string, now: Date): number {
-  const target = new Date(iso);
+  const target = calendarDate(iso);
   if (isNaN(target.getTime())) return Infinity;
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const end = new Date(
@@ -72,6 +64,10 @@ function daysFromNow(iso: string, now: Date): number {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000);
 }
 
+function calendarDate(iso: string): Date {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`);
+}
+
 function findGeneralElection(
   dates: ElectionDate[],
   cycleYear: number
@@ -80,7 +76,7 @@ function findGeneralElection(
     dates.find(
       (d) =>
         d.type === "general" &&
-        new Date(d.date).getFullYear() === cycleYear
+        calendarDate(d.date).getFullYear() === cycleYear
     ) ?? null
   );
 }
@@ -95,8 +91,8 @@ interface NextElectionSummary {
 
 /**
  * Identify the soonest upcoming election day for the state, then merge ALL
- * rows sharing that date so we know every office on the ballot (FEC returns
- * one row per office per date).
+ * rows sharing that date to summarize the offices in the FEC date records.
+ * These are statewide records, not an address-matched ballot.
  */
 function findNextElectionSummary(
   dates: ElectionDate[],
@@ -109,7 +105,7 @@ function findNextElectionSummary(
   ).getTime();
   const upcoming = dates
     .filter((d) => {
-      const t = new Date(d.date).getTime();
+      const t = calendarDate(d.date).getTime();
       return !isNaN(t) && t >= startMs;
     })
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -210,8 +206,8 @@ export default function YourBallotCard({
 
   return (
     <section>
-      <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-3">
-        Your {cycleYear} Ballot
+      <h2 className="text-xs uppercase tracking-widest text-cream/75 mb-3">
+        Federal research for your profile · {cycleYear}
       </h2>
 
       <GlassCard className="mb-4">
@@ -227,9 +223,9 @@ export default function YourBallotCard({
                 </span>
               )}
             </p>
-            <p className="text-cream/40 text-xs mt-0.5">
-              Based on your saved profile.{" "}
-              <Link href="/profile" className="text-gold/70 hover:text-gold">
+            <p className="text-cream/75 text-sm mt-1">
+              Based on your saved profile, not an address-matched ballot.{" "}
+              <Link href="/profile" className="text-gold hover:text-gold underline">
                 Change
               </Link>
             </p>
@@ -243,8 +239,8 @@ export default function YourBallotCard({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <Calendar className="h-4 w-4 text-gold" />
-                    <span className="text-[0.6rem] uppercase tracking-widest text-gold/90">
-                      Your Next Election
+                    <span className="text-xs uppercase tracking-wider text-gold/90">
+                      Next listed federal date in {stateUpper}
                     </span>
                   </div>
                   <p className="text-cream font-brand text-lg leading-tight">
@@ -253,7 +249,7 @@ export default function YourBallotCard({
                   <p className="text-cream/70 text-sm mt-1">
                     {formatLongDate(next.date)}
                   </p>
-                  <p className="text-cream/50 text-xs mt-1">
+                  <p className="text-cream/75 text-sm mt-1">
                     {days === 0
                       ? "Today"
                       : days === 1
@@ -261,6 +257,10 @@ export default function YourBallotCard({
                         : days != null && days > 0
                           ? `${days} days from now`
                           : ""}
+                  </p>
+                  <p className="text-cream/75 text-sm mt-2">
+                    This statewide date may not apply to your address or primary
+                    eligibility. Confirm with your election office.
                   </p>
                   {showHouseIncumbentInCallout && houseIncumbent && (
                     <p className="text-cream/60 text-xs mt-2 pt-2 border-t border-white/5">
@@ -271,8 +271,8 @@ export default function YourBallotCard({
                       </span>
                     </p>
                   )}
-                  <p className="text-gold/80 text-xs mt-2">
-                    See candidates and finance →
+                  <p className="text-gold text-sm mt-2">
+                    Explore federal research →
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-gold/60 shrink-0 mt-1" />
@@ -280,14 +280,15 @@ export default function YourBallotCard({
             </div>
           </Link>
         ) : (
-          <p className="text-cream/40 text-xs mb-4">
-            No upcoming federal election dates on file for {stateName(stateUpper)}.
+          <p className="text-cream/75 text-sm mb-4">
+            Upcoming federal dates for {stateName(stateUpper)} are unavailable
+            here. Check your election office for confirmed dates.
           </p>
         )}
 
         <div>
-          <p className="text-[0.6rem] uppercase tracking-widest text-cream/40 mb-2">
-            Federal races on your ballot this cycle
+          <p className="text-xs uppercase tracking-wider text-cream/75 mb-2">
+            Explore federal candidate records
           </p>
           <div className="space-y-2">
             {districtPadded && (
@@ -309,22 +310,24 @@ export default function YourBallotCard({
                 href={`/elections/${stateUpper}/senate`}
                 office="U.S. Senate"
                 title={`${stateName(stateUpper)} Senate seat`}
-                incumbentLabel="Senate seat up this cycle — see candidates and finance →"
+                incumbentLabel="FEC candidate records and campaign finance →"
               />
             )}
             {!hasSenateRace && (
-              <p className="text-cream/40 text-xs italic">
-                No U.S. Senate seat from {stateName(stateUpper)}{" "}
-                on the ballot this cycle. (Each state&apos;s two Senate seats
-                rotate on a six-year cycle.)
+              <p className="text-cream/75 text-sm">
+                Senate candidate records are not available in this overview.
+                This does not establish whether a Senate election will be held.{" "}
+                <Link href={`/elections/${stateUpper}/senate`} className="text-gold underline">
+                  Check federal research
+                </Link>
               </p>
             )}
           </div>
         </div>
 
         {showSeparateGeneral && general && (
-          <p className="text-cream/40 text-[0.7rem] mt-4">
-            General election:{" "}
+          <p className="text-cream/75 text-sm mt-4">
+            Listed federal general election date:{" "}
             <span className="text-cream/60">
               {formatLongDate(general.date)}
             </span>
@@ -350,11 +353,11 @@ function RaceRow({
     <Link href={href} className="block">
       <div className="flex items-center justify-between gap-3 rounded-md border border-glass-border bg-glass-bg px-3 py-2.5 hover:border-cream/30 transition-colors">
         <div className="min-w-0">
-          <p className="text-[0.6rem] uppercase tracking-widest text-cream/40">
+          <p className="text-xs uppercase tracking-wider text-cream/75">
             {office}
           </p>
           <p className="text-cream font-medium text-sm mt-0.5">{title}</p>
-          <p className="text-cream/50 text-xs mt-0.5 truncate">
+          <p className="text-cream/75 text-sm mt-0.5">
             {incumbentLabel}
           </p>
         </div>

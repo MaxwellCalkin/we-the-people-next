@@ -23,7 +23,7 @@ export default async function StateSenatePage({ params }: SenatePageProps) {
   await connectDB();
   const cycle = currentCycle();
 
-  const [candidates, sittingMember] = await Promise.all([
+  const [candidatesResult, sittingMemberResult] = await Promise.allSettled([
     loadRaceCandidatesWithFinance({
       state,
       office: "S",
@@ -31,11 +31,13 @@ export default async function StateSenatePage({ params }: SenatePageProps) {
     }),
     getSittingMember({ state, office: "S" }),
   ]);
+  const candidates = candidatesResult.status === "fulfilled" ? candidatesResult.value : [];
+  const sittingMember = sittingMemberResult.status === "fulfilled" ? sittingMemberResult.value : null;
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       <header>
-        <p className="text-cream/40 text-xs uppercase tracking-widest mb-1">
+        <p className="text-cream/70 text-xs uppercase tracking-widest mb-1">
           <Link href="/elections" className="hover:text-cream">
             Elections
           </Link>
@@ -47,21 +49,25 @@ export default async function StateSenatePage({ params }: SenatePageProps) {
         <h1 className="font-brand text-3xl sm:text-4xl text-gradient">
           {info.name} — U.S. Senate
         </h1>
-        <p className="text-cream/40 text-sm mt-1">
-          {cycle} general election. Sorted by total receipts.
+        <p className="text-cream/75 text-sm mt-2">
+          Federal candidate research · {cycle - 1}–{cycle} finance cycle
         </p>
+        <Link href="/elections" className="inline-block text-gold text-sm mt-3 hover:underline">
+          Find official ballot information →
+        </Link>
       </header>
 
       <SittingMemberBanner
         member={sittingMember}
         office="U.S. Senate"
         seatLabel={`${stateName(state)} seat`}
-        emptyMessage={`Heard doesn’t have a confirmed sitting senator on file for the seat being contested in ${info.name} this cycle. (Each state has two senators; only one may be up.)`}
+        emptyMessage={`A sitting senator could not be matched to these records. FEC filings alone do not establish which Senate seats are being contested in ${info.name}.`}
       />
 
       <RaceCandidateList
         candidates={candidates}
-        emptyMessage={`No Senate race in ${info.name} this cycle.`}
+        unavailable={candidatesResult.status === "rejected"}
+        emptyMessage={`No Senate candidate records were returned for ${info.name}. This does not establish whether a Senate election will be held; check the official election office.`}
       />
     </div>
   );

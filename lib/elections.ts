@@ -218,7 +218,8 @@ export async function loadRaceCandidatesWithFinance(opts: {
     });
   } catch (e) {
     console.error("Batched totals fetch failed for", key, e);
-    return [];
+    // Preserve failure so callers do not present an outage as an empty roster.
+    throw e;
   }
 
   await writeRaceCache(key, batched, ttlMs).catch((e) => {
