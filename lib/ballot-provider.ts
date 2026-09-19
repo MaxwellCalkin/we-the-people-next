@@ -278,8 +278,13 @@ export async function lookupBallot(address: string, electionId?: string, now = n
     if (electionId) params.electionId = electionId;
     const result = await civicRequest("voterinfo", key, params);
     const data = object(result.data);
-    if (!result.ok) {
-      const reasons = list(object(data.error).errors).map((value) => string(object(value).reason));
+    // Civic can return some election data alongside an unsuccessful address status.
+    // Never present that data as matched to this voter, even when HTTP succeeds.
+    if (!result.ok || ("status" in data && data.status !== "success")) {
+      const reasons = [data.status, ...list(object(data.error).errors).map((value) => string(object(value).reason))];
+      if (reasons.includes("multipleStreetSegmentsFound")) {
+        return { status: "invalid_address", message: "We could not uniquely match that registered address. Include any apartment or unit, or contact your election office for confirmation." };
+      }
       if (reasons.some((reason) => reason === "parseError" || reason === "addressUnparseable")) {
         return { status: "invalid_address", message: "We could not match that address. Enter your full registered street address, including city, state, and ZIP code." };
       }

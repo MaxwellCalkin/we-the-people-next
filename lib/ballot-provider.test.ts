@@ -237,6 +237,33 @@ describe("live provider boundaries", () => {
     expect(JSON.stringify(response)).not.toContain(address);
   });
 
+  it.each(["addressUnparseable", "multipleStreetSegmentsFound"])("rejects a %s address status even with an HTTP 200 and ballot data", async (status) => {
+    mockResponse({ ...fixture, status, otherElections: [{ ...election, id: "8888" }], error: { message: `Sensitive ${address} test-key` } });
+    const response = await lookupBallot(address, undefined, now);
+    expect(response.status).toBe("invalid_address");
+    expect(response.ballot).toBeUndefined();
+    expect(response.elections).toBeUndefined();
+    expect(JSON.stringify(response)).not.toContain(address);
+    expect(JSON.stringify(response)).not.toContain("test-key");
+  });
+
+  it.each(["noStreetSegmentFound", "noAddressParameter", "electionOver", "electionUnknown", "internalLookupFailure", "unexpectedStatus", "", null])("does not treat non-success status %s as a matched ballot", async (status) => {
+    mockResponse({ ...fixture, status });
+    const response = await lookupBallot(address, "9999", now);
+    expect(response.status).toBe("unavailable");
+    expect(response.ballot).toBeUndefined();
+    expect(response.message).toContain("does not mean there are no contests");
+  });
+
+  it("accepts explicit success and preserves responses with no top-level status", async () => {
+    mockResponse({ ...fixture, status: "success" });
+    const explicit = await lookupBallot(address, "9999", now);
+    expect(explicit.status).toBe("ready");
+    mockResponse(fixture);
+    const absent = await lookupBallot(address, "9999", now);
+    expect(absent).toEqual(explicit);
+  });
+
   it("returns a safe unavailable state for failure, timeout and malformed provider data", async () => {
     mockResponse({ error: { message: `Secret test-key for ${address}` } }, 403);
     expect(await lookupBallot(address, undefined, now)).toMatchObject({ status: "unavailable" });
