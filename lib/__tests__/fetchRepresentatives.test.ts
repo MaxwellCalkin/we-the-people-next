@@ -21,7 +21,7 @@ function serveMembers(
   membersByPath: Record<string, unknown[]>,
   { maxPageSize = 250 } = {}
 ) {
-  mockFetch.mockImplementation(async (input: string) => {
+  mockFetch.mockImplementation(async (input: string | URL) => {
     const url = new URL(input);
     const members = membersByPath[url.pathname.replace("/v3/member/", "")] ?? [];
     const limit = Math.min(

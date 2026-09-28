@@ -248,16 +248,22 @@ export async function fetchMembers(
     : state.toUpperCase();
 
   // The API returns 20 members per page by default and California alone has
-  // 54, so ask for the 250 maximum and keep following `pagination.next` in
-  // case a page still comes back short.
+  // 54, so ask the state list for its 250 maximum (the district lookup takes
+  // no limit) and follow `pagination.next` in case a page still comes back
+  // short.
+  let url: URL | null = new URL(`${CONGRESS_API}/member/${path}`);
+  url.searchParams.set("currentMember", "true");
+  if (!district) url.searchParams.set("limit", "250");
+
   const members: ApiMember[] = [];
-  for (let page = 0; page < MAX_MEMBER_PAGES; page++) {
-    const url = `${CONGRESS_API}/member/${path}?currentMember=true&limit=250&offset=${members.length}&api_key=${process.env.CONGRESS_KEY}&format=json`;
-    const resp = await fetch(url);
-    const data = await resp.json();
-    const batch: ApiMember[] = data.members || [];
-    members.push(...batch);
-    if (batch.length === 0 || !data.pagination?.next) break;
+  for (let page = 0; url && page < MAX_MEMBER_PAGES; page++) {
+    url.searchParams.set("format", "json");
+    url.searchParams.set("api_key", process.env.CONGRESS_KEY ?? "");
+    const resp: Response = await fetch(url);
+    const data: { members?: ApiMember[]; pagination?: { next?: string } } =
+      await resp.json();
+    members.push(...(data.members || []));
+    url = data.pagination?.next ? new URL(data.pagination.next) : null;
   }
 
   return members.map(
