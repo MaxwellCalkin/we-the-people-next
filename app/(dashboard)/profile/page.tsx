@@ -7,7 +7,7 @@ import connectDB from "@/lib/db";
 import User from "@/models/User";
 import Proposal from "@/models/Proposal";
 import Bill from "@/models/Bill";
-import { fetchMembers } from "@/lib/congress";
+import { fetchRepresentatives } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import ProfileHeader from "@/components/features/ProfileHeader";
 import ProfileTabs from "@/components/features/ProfileTabs";
@@ -26,18 +26,11 @@ export default async function ProfilePage() {
 
   if (!userState || !userCd) redirect("/onboarding");
 
-  // Fetch House rep and senators
-  const houseReps = await fetchMembers(userState, userCd);
-  const allStateMembers = await fetchMembers(userState);
-  const senators = allStateMembers.filter(
-    (m) => !m.district || m.district === 0
-  );
-
-  const houseRep = houseReps.length > 0 ? houseReps[0] : null;
+  const { senators, houseRep } = await fetchRepresentatives(userState, userCd);
 
   // Build rep cards with alignment scores — Senator | Senator | House Rep
   const allReps = [
-    ...senators.slice(0, 2).map((s) => ({ ...s, role: "Senator" })),
+    ...senators.map((s) => ({ ...s, role: "Senator" })),
     ...(houseRep ? [{ ...houseRep, role: "House Rep" }] : []),
   ];
 

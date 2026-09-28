@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import {
   fetchBillDetails,
-  fetchMembers,
+  fetchRepresentatives,
   getMemberVoteOnBill,
   parseBillSlug,
 } from "@/lib/congress";
@@ -35,17 +35,12 @@ export default async function VotedPage({ params }: VotedPageProps) {
   // house vote), which made cold loads feel slow. None of these actually
   // depend on each other: the bill fetch only gates redirect, and rep-vote
   // lookups are keyed off the URL slug, not the bill response.
-  const [bill, allStateMembers, houseReps] = await Promise.all([
+  const [bill, { senators, houseRep }] = await Promise.all([
     fetchBillDetails(congress, slug),
-    fetchMembers(userState),
-    fetchMembers(userState, userCd),
+    fetchRepresentatives(userState, userCd),
   ]);
 
   if (!bill) redirect("/bills");
-
-  const senators = allStateMembers
-    .filter((m) => !m.district || m.district === 0)
-    .slice(0, 2);
 
   const repVotes: { name: string; vote: string; role: string }[] = [];
   if (parsed) {
@@ -56,10 +51,10 @@ export default async function VotedPage({ params }: VotedPageProps) {
         role: "Senator" as const,
         chamber: "senate" as const,
       })),
-      ...(houseReps[0]
+      ...(houseRep
         ? [{
-            id: houseReps[0].id,
-            name: houseReps[0].name,
+            id: houseRep.id,
+            name: houseRep.name,
             role: "House Representative" as const,
             chamber: "house" as const,
           }]
