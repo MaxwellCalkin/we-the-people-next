@@ -61,7 +61,8 @@ export default async function ElectionsIndexPage() {
         </h1>
         <p className="text-cream/50 text-sm max-w-2xl">
           Federal candidates and campaign finance for the {cycle - 1}&ndash;
-          {cycle} cycle. Heard tracks U.S. House, Senate, and Presidential
+          {cycle}{" "}
+          cycle. Heard tracks U.S. House, Senate, and Presidential
           races plus outside (Super PAC) spending — state and local races
           aren&apos;t covered yet.
         </p>
