@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import MemberScore from "@/models/MemberScore";
@@ -23,6 +24,11 @@ import UpcomingElectionsCalendar from "@/components/features/UpcomingElectionsCa
 
 export default async function ElectionsIndexPage() {
   const session = await auth();
+  // Signed in without a saved district (e.g. a brand-new Google account, which
+  // lands here after sign-in): collect it first so we can show their ballot.
+  if (session && (!session.user.state || !session.user.cd)) {
+    redirect("/onboarding");
+  }
   await connectDB();
   const cycle = currentCycle();
 

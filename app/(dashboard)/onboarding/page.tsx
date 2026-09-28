@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import GlassCard from "@/components/ui/GlassCard";
 import MagneticButton from "@/components/ui/MagneticButton";
+import { HOME_PATH } from "@/lib/routes";
 
 interface District {
   number: number;
@@ -35,7 +36,7 @@ export default function OnboardingPage() {
 
     // Refresh the session so needsOnboarding updates
     await update();
-    router.push("/bills");
+    router.push(HOME_PATH);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
