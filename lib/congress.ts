@@ -251,19 +251,24 @@ export async function fetchMembers(
   // 54, so ask the state list for its 250 maximum (the district lookup takes
   // no limit) and follow `pagination.next` in case a page still comes back
   // short.
-  let url: URL | null = new URL(`${CONGRESS_API}/member/${path}`);
-  url.searchParams.set("currentMember", "true");
-  if (!district) url.searchParams.set("limit", "250");
+  const limit = district ? "" : "&limit=250";
+  let url = `${CONGRESS_API}/member/${path}?currentMember=true${limit}&format=json`;
 
   const members: ApiMember[] = [];
-  for (let page = 0; url && page < MAX_MEMBER_PAGES; page++) {
-    url.searchParams.set("format", "json");
-    url.searchParams.set("api_key", process.env.CONGRESS_KEY ?? "");
-    const resp: Response = await fetch(url);
+  for (let page = 0; page < MAX_MEMBER_PAGES; page++) {
+    // Append the key as raw text, like every other call in this file. fetch's
+    // URL parser drops a stray newline from the env var, while URLSearchParams
+    // would encode it into a key that Congress.gov rejects.
+    const resp: Response = await fetch(
+      `${url}&api_key=${process.env.CONGRESS_KEY}`
+    );
     const data: { members?: ApiMember[]; pagination?: { next?: string } } =
       await resp.json();
     members.push(...(data.members || []));
-    url = data.pagination?.next ? new URL(data.pagination.next) : null;
+    if (!data.pagination?.next) break;
+    const next = new URL(data.pagination.next);
+    next.searchParams.set("format", "json");
+    url = next.toString();
   }
 
   return members.map(
