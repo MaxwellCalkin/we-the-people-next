@@ -196,8 +196,46 @@ async function searchBillsGovTrack(
   );
 }
 
+interface ApiMemberTerm {
+  chamber?: string;
+  startYear?: number;
+  endYear?: number;
+}
+
+interface ApiMember {
+  bioguideId?: string;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  partyName?: string;
+  party?: string;
+  state?: string;
+  district?: number | null;
+  terms?: { item?: ApiMemberTerm[] } | ApiMemberTerm[];
+}
+
+/** Upper bound on pages per member lookup, in case pagination misbehaves. */
+const MAX_MEMBER_PAGES = 5;
+
 /**
- * Fetch members from Congress.gov API by state, optionally filtered by district.
+ * The chamber a member serves in now. Congress.gov lists terms oldest first,
+ * so the latest term is the current seat. The district number alone can't
+ * tell: an at-large House member's district is 0, and a senator who served in
+ * the House first may still list a district.
+ */
+function currentChamber(m: ApiMember): "Senate" | "House" {
+  const terms = Array.isArray(m.terms) ? m.terms : m.terms?.item ?? [];
+  const latest = terms[terms.length - 1];
+  if (latest?.chamber) {
+    return latest.chamber === "Senate" ? "Senate" : "House";
+  }
+  // Without terms, fall back to the district, which only House members have.
+  return m.district == null ? "Senate" : "House";
+}
+
+/**
+ * Fetch current members from Congress.gov API by state, optionally filtered by
+ * district.
  */
 export async function fetchMembers(
   state: string,
@@ -205,38 +243,60 @@ export async function fetchMembers(
 ): Promise<MemberResult[]> {
   if (!state) return [];
 
-  const base = `${CONGRESS_API}/member`;
-  let url: string;
+  const path = district
+    ? `${state.toUpperCase()}/${district}`
+    : state.toUpperCase();
 
-  if (district) {
-    url = `${base}/${state.toUpperCase()}/${district}?currentMember=true&api_key=${process.env.CONGRESS_KEY}&format=json`;
-  } else {
-    url = `${base}/${state.toUpperCase()}?currentMember=true&api_key=${process.env.CONGRESS_KEY}&format=json`;
+  // The API returns 20 members per page by default and California alone has
+  // 54, so ask the state list for its 250 maximum (the district lookup takes
+  // no limit) and follow `pagination.next` in case a page still comes back
+  // short.
+  let url: URL | null = new URL(`${CONGRESS_API}/member/${path}`);
+  url.searchParams.set("currentMember", "true");
+  if (!district) url.searchParams.set("limit", "250");
+
+  const members: ApiMember[] = [];
+  for (let page = 0; url && page < MAX_MEMBER_PAGES; page++) {
+    url.searchParams.set("format", "json");
+    url.searchParams.set("api_key", process.env.CONGRESS_KEY ?? "");
+    const resp: Response = await fetch(url);
+    const data: { members?: ApiMember[]; pagination?: { next?: string } } =
+      await resp.json();
+    members.push(...(data.members || []));
+    url = data.pagination?.next ? new URL(data.pagination.next) : null;
   }
 
-  const resp = await fetch(url);
-  const data = await resp.json();
-  const members = data.members || [];
-
   return members.map(
-    (m: {
-      bioguideId?: string;
-      name?: string;
-      firstName?: string;
-      lastName?: string;
-      partyName?: string;
-      party?: string;
-      state?: string;
-      district?: number;
-    }): MemberResult => ({
+    (m): MemberResult => ({
       id: m.bioguideId || "",
       name:
         m.name || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
       party: m.partyName || m.party || "",
       state: m.state || state,
-      district: m.district,
+      district: m.district ?? undefined,
+      chamber: currentChamber(m),
     })
   );
+}
+
+/**
+ * The two senators and the House member currently representing a
+ * congressional district.
+ */
+export async function fetchRepresentatives(
+  state: string,
+  district: string | number
+): Promise<{ senators: MemberResult[]; houseRep: MemberResult | null }> {
+  const [stateMembers, districtMembers] = await Promise.all([
+    fetchMembers(state),
+    fetchMembers(state, district),
+  ]);
+
+  return {
+    senators: stateMembers.filter((m) => m.chamber === "Senate").slice(0, 2),
+    // A district lookup can also match a senator who once held the House seat.
+    houseRep: districtMembers.find((m) => m.chamber === "House") ?? null,
+  };
 }
 
 /**

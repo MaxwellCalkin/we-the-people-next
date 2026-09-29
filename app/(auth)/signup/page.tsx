@@ -7,6 +7,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import GlassCard from "@/components/ui/GlassCard";
 import MagneticButton from "@/components/ui/MagneticButton";
+import { HOME_PATH } from "@/lib/routes";
 
 interface District {
   number: number;
@@ -81,7 +82,7 @@ export default function SignupPage() {
         toast.error("Account created but login failed. Please log in manually.");
         router.push("/login");
       } else {
-        router.push("/profile");
+        router.push(HOME_PATH);
       }
     } catch {
       toast.error("Something went wrong. Please try again.");
@@ -102,7 +103,7 @@ export default function SignupPage() {
       <div className="flex flex-col gap-4 mb-2">
         <MagneticButton
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/bills" })}
+          onClick={() => signIn("google", { callbackUrl: HOME_PATH })}
           className="w-full"
         >
           Sign up with Google

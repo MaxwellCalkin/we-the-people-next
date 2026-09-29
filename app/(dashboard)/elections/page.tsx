@@ -2,6 +2,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import MemberScore from "@/models/MemberScore";
@@ -23,6 +24,11 @@ import UpcomingElectionsCalendar from "@/components/features/UpcomingElectionsCa
 
 export default async function ElectionsIndexPage() {
   const session = await auth();
+  // Signed in without a saved district (e.g. a brand-new Google account, which
+  // lands here after sign-in): collect it first so we can show their ballot.
+  if (session && (!session.user.state || !session.user.cd)) {
+    redirect("/onboarding");
+  }
   await connectDB();
   const cycle = currentCycle();
 
@@ -55,7 +61,8 @@ export default async function ElectionsIndexPage() {
         </h1>
         <p className="text-cream/50 text-sm max-w-2xl">
           Federal candidates and campaign finance for the {cycle - 1}&ndash;
-          {cycle} cycle. Heard tracks U.S. House, Senate, and Presidential
+          {cycle}{" "}
+          cycle. Heard tracks U.S. House, Senate, and Presidential
           races plus outside (Super PAC) spending — state and local races
           aren&apos;t covered yet.
         </p>

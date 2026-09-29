@@ -27,6 +27,7 @@ export interface MemberResult {
   party: string;
   state: string;
   district?: number;
+  chamber: "Senate" | "House";
   url?: string;
 }
 

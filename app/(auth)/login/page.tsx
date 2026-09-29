@@ -7,6 +7,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import GlassCard from "@/components/ui/GlassCard";
 import MagneticButton from "@/components/ui/MagneticButton";
+import { HOME_PATH } from "@/lib/routes";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export default function LoginPage() {
       if (result?.error) {
         toast.error("Invalid email or password.");
       } else {
-        router.push("/profile");
+        router.push(HOME_PATH);
       }
     } catch {
       toast.error("Something went wrong. Please try again.");
@@ -49,7 +50,7 @@ export default function LoginPage() {
       <div className="flex flex-col gap-4 mb-2">
         <MagneticButton
           type="button"
-          onClick={() => signIn("google", { callbackUrl: "/bills" })}
+          onClick={() => signIn("google", { callbackUrl: HOME_PATH })}
           className="w-full"
         >
           Sign in with Google

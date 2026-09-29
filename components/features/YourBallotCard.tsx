@@ -220,12 +220,13 @@ export default function YourBallotCard({
           <div className="min-w-0">
             <p className="text-cream font-medium text-sm">
               {stateName(stateUpper)}
-              {districtNum && (
+              {/* Ternary, not &&: at-large districts are 0, which React would render. */}
+              {districtNum ? (
                 <span className="text-cream/60">
                   {" "}
                   · Congressional District {districtNum}
                 </span>
-              )}
+              ) : null}
             </p>
             <p className="text-cream/40 text-xs mt-0.5">
               Based on your saved profile.{" "}
