@@ -8,10 +8,9 @@ import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import Bill from "@/models/Bill";
 import User from "@/models/User";
-import { fetchBillDetails, fetchMembers, getMemberVoteOnBill, parseBillSlug } from "@/lib/congress";
+import { fetchBillDetails, fetchRepresentatives, getMemberVoteOnBill, parseBillSlug } from "@/lib/congress";
 import { getUserVotes } from "@/lib/viewer";
-import { districtKey } from "@/lib/usGeo";
-import { formatBillNumber, formatDate } from "@/lib/format";
+import { formatBillNumber, formatDate, seatLabel } from "@/lib/format";
 import { loginHref } from "@/lib/safe-redirect";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
@@ -41,10 +40,9 @@ export default async function VotedPage({ params }: VotedPageProps) {
   const hasDistrict = Boolean(userState && userCd);
 
   // Independent I/O runs concurrently; rep-vote lookups key off the URL slug.
-  const [bill, allStateMembers, houseReps, userVotes, billDoc, districtYeas, districtNays] = await Promise.all([
+  const [bill, { senators, houseRep }, userVotes, billDoc, districtYeas, districtNays] = await Promise.all([
     fetchBillDetails(congress, slug).catch(() => null),
-    fetchMembers(userState).catch(() => []),
-    fetchMembers(userState, userCd).catch(() => []),
+    fetchRepresentatives(userState, userCd).catch(() => ({ senators: [], houseRep: null })),
     getUserVotes(),
     Bill.findOne({ billSlug: slug }).select("yeas nays").lean(),
     hasDistrict ? User.countDocuments({ yeaBillSlugs: slug, state: userState, cd: userCd }) : Promise.resolve(0),
@@ -64,13 +62,10 @@ export default async function VotedPage({ params }: VotedPageProps) {
     );
   }
 
-  const senators = allStateMembers.filter((m) => !m.district || m.district === 0).slice(0, 2);
   const voteTargets = parsed
     ? [
         ...senators.map((s) => ({ id: s.id, name: s.name, role: "Senator", chamber: "senate" as const })),
-        ...(houseReps[0]
-          ? [{ id: houseReps[0].id, name: houseReps[0].name, role: "Representative", chamber: "house" as const }]
-          : []),
+        ...(houseRep ? [{ id: houseRep.id, name: houseRep.name, role: "Representative", chamber: "house" as const }] : []),
       ]
     : [];
   const votes = await Promise.all(
@@ -81,7 +76,7 @@ export default async function VotedPage({ params }: VotedPageProps) {
   const repVotes: RepVote[] = voteTargets.map((t, i) => ({ id: t.id, name: t.name, role: t.role, vote: votes[i] }));
 
   const userVote = userVotes[slug] ?? null;
-  const district = hasDistrict ? districtKey(userState, userCd) : undefined;
+  const district = hasDistrict ? seatLabel("House", userState, userCd) : undefined;
   const returnTo = `/vote/${slug}/${congress}`;
 
   return (

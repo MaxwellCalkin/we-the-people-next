@@ -8,6 +8,7 @@ import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import Field, { describedBy } from "@/components/ui/Field";
 import DistrictChoice, { type DistrictOption } from "@/components/auth/DistrictChoice";
+import { HOME_PATH } from "@/lib/routes";
 
 export default function OnboardingPage() {
   const { update } = useSession();
@@ -30,9 +31,9 @@ export default function OnboardingPage() {
       setLoading(false);
       return;
     }
-    // Refresh the session so needsOnboarding updates, then show their representatives.
+    // Refresh the session so needsOnboarding updates, then open the signed-in home.
     await update();
-    router.push("/profile");
+    router.push(HOME_PATH);
     router.refresh();
   };
 

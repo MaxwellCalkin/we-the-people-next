@@ -8,7 +8,7 @@ import connectDB from "@/lib/db";
 import User from "@/models/User";
 import Proposal from "@/models/Proposal";
 import Bill from "@/models/Bill";
-import { fetchMembers } from "@/lib/congress";
+import { fetchRepresentatives } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import { loginHref } from "@/lib/safe-redirect";
 import ProfileHeader from "@/components/features/ProfileHeader";
@@ -30,16 +30,14 @@ export default async function ProfilePage() {
 
   if (!userState || !userCd) redirect("/onboarding");
 
-  // House rep and senators — Senator | Senator | House Rep
-  const [houseReps, allStateMembers] = await Promise.all([
-    fetchMembers(userState, userCd).catch(() => []),
-    fetchMembers(userState).catch(() => []),
-  ]);
-  const senators = allStateMembers.filter((m) => !m.district || m.district === 0);
-  const houseRep = houseReps.length > 0 ? houseReps[0] : null;
+  // Senator | Senator | House member
+  const { senators, houseRep } = await fetchRepresentatives(userState, userCd).catch(() => ({
+    senators: [],
+    houseRep: null,
+  }));
 
   const allReps = [
-    ...senators.slice(0, 2).map((s) => ({ ...s, role: "Senator" })),
+    ...senators.map((s) => ({ ...s, role: "Senator" })),
     ...(houseRep ? [{ ...houseRep, role: "Representative" }] : []),
   ];
 

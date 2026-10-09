@@ -12,6 +12,7 @@ import GoogleButton from "./GoogleButton";
 import PasswordInput from "./PasswordInput";
 import DistrictChoice, { type DistrictOption } from "./DistrictChoice";
 import { loginHref } from "@/lib/safe-redirect";
+import { HOME_PATH } from "@/lib/routes";
 
 // Mirrors the server-side checks in app/api/auth/signup/route.ts.
 const USERNAME_PATTERN = /^[a-zA-Z0-9_-]{3,30}$/;
@@ -264,7 +265,7 @@ export default function SignupForm({ callbackUrl }: { callbackUrl: string }) {
       <p className="mt-8 text-center text-sm text-ink-2">
         Already have an account?{" "}
         <Link
-          href={callbackUrl === "/profile" ? "/login" : loginHref(callbackUrl)}
+          href={callbackUrl === HOME_PATH ? "/login" : loginHref(callbackUrl)}
           className="font-semibold text-gold-bright underline-offset-4 hover:text-gold hover:underline"
         >
           Log in

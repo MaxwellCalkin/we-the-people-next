@@ -10,6 +10,7 @@ import Field from "@/components/ui/Field";
 import GoogleButton from "./GoogleButton";
 import PasswordInput from "./PasswordInput";
 import { loginHref } from "@/lib/safe-redirect";
+import { HOME_PATH } from "@/lib/routes";
 
 export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   const router = useRouter();
@@ -91,7 +92,7 @@ export default function LoginForm({ callbackUrl }: { callbackUrl: string }) {
       <p className="mt-8 text-center text-sm text-ink-2">
         New to Heard?{" "}
         <Link
-          href={callbackUrl === "/profile" ? "/signup" : loginHref(callbackUrl, "/signup")}
+          href={callbackUrl === HOME_PATH ? "/signup" : loginHref(callbackUrl, "/signup")}
           className="font-semibold text-gold-bright underline-offset-4 hover:text-gold hover:underline"
         >
           Create a free account

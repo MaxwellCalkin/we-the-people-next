@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowUpRight, CalendarDays } from "lucide-react";
+import { auth } from "@/lib/auth";
 import BallotExplorer from "@/components/features/ballot/BallotExplorer";
 import StatePicker from "@/components/features/StatePicker";
 import { exampleBallot } from "@/lib/ballot-demo";
@@ -10,7 +12,14 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "My ballot" };
 
-export default function ElectionsIndexPage() {
+export default async function ElectionsIndexPage() {
+  const session = await auth();
+  // Signed in without a saved district (e.g. a brand-new Google account, which
+  // lands here after sign-in): collect it first.
+  if (session && (!session.user.state || !session.user.cd)) {
+    redirect("/onboarding");
+  }
+
   return (
     <div className={styles.page} data-ballot-page>
       <header className={styles.pageHeader}>

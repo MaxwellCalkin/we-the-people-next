@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loginHref, safeCallbackUrl } from "@/lib/safe-redirect";
+import { HOME_PATH } from "@/lib/routes";
 
 describe("safeCallbackUrl", () => {
   it("keeps same-site paths, including query strings", () => {
@@ -7,20 +8,20 @@ describe("safeCallbackUrl", () => {
     expect(safeCallbackUrl("/proposals?scope=state&state=PA")).toBe("/proposals?scope=state&state=PA");
   });
 
-  it("falls back for missing values", () => {
-    expect(safeCallbackUrl(undefined)).toBe("/profile");
+  it("falls back to the signed-in home for missing values", () => {
+    expect(safeCallbackUrl(undefined)).toBe(HOME_PATH);
     expect(safeCallbackUrl("", "/bills")).toBe("/bills");
   });
 
   it("rejects absolute and protocol-relative URLs that would leave the site", () => {
-    expect(safeCallbackUrl("https://evil.example/phish")).toBe("/profile");
-    expect(safeCallbackUrl("//evil.example")).toBe("/profile");
-    expect(safeCallbackUrl("/\\evil.example")).toBe("/profile");
+    expect(safeCallbackUrl("https://evil.example/phish")).toBe(HOME_PATH);
+    expect(safeCallbackUrl("//evil.example")).toBe(HOME_PATH);
+    expect(safeCallbackUrl("/\\evil.example")).toBe(HOME_PATH);
   });
 
   it("does not send people back to the auth pages they just left", () => {
-    expect(safeCallbackUrl("/login?callbackUrl=/x")).toBe("/profile");
-    expect(safeCallbackUrl("/signup")).toBe("/profile");
+    expect(safeCallbackUrl("/login?callbackUrl=/x")).toBe(HOME_PATH);
+    expect(safeCallbackUrl("/signup")).toBe(HOME_PATH);
   });
 
   it("uses the first value when a param is repeated", () => {

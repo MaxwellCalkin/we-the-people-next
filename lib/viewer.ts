@@ -4,7 +4,7 @@ import { cache } from "react";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import User from "@/models/User";
-import { districtKey } from "@/lib/usGeo";
+import { seatLabel } from "@/lib/format";
 
 export interface Viewer {
   id: string;
@@ -13,7 +13,7 @@ export interface Viewer {
   /** Upper-case state code, or "" when unknown. */
   state: string;
   cd: string;
-  /** "PA-12" when both state and district are known. */
+  /** "PA-12" (or "VT at-large") when both state and district are known. */
   district?: string;
 }
 
@@ -52,6 +52,6 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     avatar,
     state,
     cd,
-    district: state && cd ? districtKey(state, cd) : undefined,
+    district: state && cd ? seatLabel("House", state, cd) : undefined,
   };
 });
