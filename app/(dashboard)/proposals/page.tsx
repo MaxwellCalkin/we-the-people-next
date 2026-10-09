@@ -7,14 +7,19 @@
 // anyone — the viewer's location is only a starting default, never a gate.
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
-import { Plus } from "lucide-react";
+import type { Metadata } from "next";
+import { Lightbulb, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { listProposals } from "@/lib/proposals";
-import { isValidStateCode } from "@/lib/states";
+import { isValidStateCode, stateName } from "@/lib/states";
+import { seatLabel } from "@/lib/format";
 import ProposalBoardControls from "@/components/features/ProposalBoardControls";
 import ProposalCard from "@/components/features/ProposalCard";
-import StaggerReveal from "@/components/animations/StaggerReveal";
+import PageHeader from "@/components/ui/PageHeader";
+import EmptyState from "@/components/ui/EmptyState";
+import { ButtonLink } from "@/components/ui/Button";
+
+export const metadata: Metadata = { title: "Community proposals" };
 
 type Scope = "global" | "state" | "district";
 type Sort = "top" | "new";
@@ -33,9 +38,7 @@ export default async function ProposalsPage({ searchParams }: ProposalsPageProps
   const params = await searchParams;
 
   const viewerState =
-    session?.user?.state && isValidStateCode(session.user.state)
-      ? session.user.state.toUpperCase()
-      : undefined;
+    session?.user?.state && isValidStateCode(session.user.state) ? session.user.state.toUpperCase() : undefined;
   const viewerDistrict = session?.user?.cd || undefined;
 
   // Resolve scope. An explicit URL value wins; otherwise default to Global
@@ -51,10 +54,7 @@ export default async function ProposalsPage({ searchParams }: ProposalsPageProps
 
   // Resolve state/district, falling back to the viewer's own location and
   // finally collapsing to Global if a narrower scope has no usable location.
-  let state =
-    params.state && isValidStateCode(params.state)
-      ? params.state.toUpperCase()
-      : viewerState;
+  let state = params.state && isValidStateCode(params.state) ? params.state.toUpperCase() : viewerState;
   let district = params.district || (state === viewerState ? viewerDistrict : undefined);
 
   if ((scope === "state" || scope === "district") && !state) {
@@ -69,7 +69,7 @@ export default async function ProposalsPage({ searchParams }: ProposalsPageProps
 
   const sort: Sort = params.sort === "new" ? "new" : "top";
 
-  const { proposals } = await listProposals({
+  const { proposals, total } = await listProposals({
     scope,
     state: scope === "global" ? undefined : state,
     district: scope === "district" ? district : undefined,
@@ -78,56 +78,50 @@ export default async function ProposalsPage({ searchParams }: ProposalsPageProps
   });
 
   const scopeLabel =
-    scope === "district"
-      ? `${state}-${district}`
-      : scope === "state"
-        ? state
-        : "Nationwide";
+    scope === "district" && state
+      ? seatLabel("House", state, district)
+      : scope === "state" && state
+        ? stateName(state)
+        : "the whole country";
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-2">
-        <div>
-          <h1 className="font-brand text-3xl sm:text-4xl text-gradient">Proposals</h1>
-          <p className="text-cream/50 text-sm mt-1">
-            Community ideas for new bills — upvote the ones you want your
-            representatives to hear.
-          </p>
-        </div>
-        <Link
-          href="/proposals/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-semibold text-navy hover:bg-gold/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Propose a Bill
-        </Link>
-      </div>
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <PageHeader
+        eyebrow="Community"
+        title="Proposals"
+        description="Ideas for new laws from people on Heard. Upvote the ones you want your representatives to hear about."
+        actions={
+          <ButtonLink href="/proposals/new" icon={<Plus className="h-4 w-4" aria-hidden="true" />}>
+            Propose a Bill
+          </ButtonLink>
+        }
+      />
 
-      <div className="mt-6 mb-6">
-        <ProposalBoardControls
-          scope={scope}
-          sort={sort}
-          state={state ?? ""}
-          district={district ?? ""}
-        />
-      </div>
+      <ProposalBoardControls scope={scope} sort={sort} state={state ?? ""} district={district ?? ""} />
+
+      <p className="mb-4 mt-5 text-sm text-ink-3" aria-live="polite">
+        {total === 0
+          ? `No proposals from ${scopeLabel} yet`
+          : `${total.toLocaleString("en-US")} ${total === 1 ? "proposal" : "proposals"} from ${scopeLabel}, ${
+              sort === "top" ? "most upvoted first" : "newest first"
+            }`}
+      </p>
 
       {proposals.length === 0 ? (
-        <div className="glass-card text-center py-12">
-          <p className="text-cream/60 text-lg">No proposals yet for {scopeLabel}.</p>
-          <p className="text-cream/40 text-sm mt-2">
-            Be the first to{" "}
-            <Link href="/proposals/new" className="text-gold hover:text-gold/80">
-              propose a bill
-            </Link>
-            .
-          </p>
-        </div>
+        <EmptyState
+          icon={Lightbulb}
+          title={scope === "global" ? "No proposals yet" : `No proposals from ${scopeLabel} yet`}
+          description="Describe a problem and what you'd like Congress to do about it. Neighbors can upvote it, and you'll see where the support comes from."
+          action={<ButtonLink href="/proposals/new">Write a proposal</ButtonLink>}
+        />
       ) : (
-        <StaggerReveal className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {proposals.map((proposal) => (
-            <ProposalCard key={proposal._id} proposal={proposal} />
+        <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {proposals.map((proposal, i) => (
+            <li key={proposal._id}>
+              <ProposalCard proposal={proposal} rank={sort === "top" ? i + 1 : undefined} />
+            </li>
           ))}
-        </StaggerReveal>
+        </ul>
       )}
     </div>
   );

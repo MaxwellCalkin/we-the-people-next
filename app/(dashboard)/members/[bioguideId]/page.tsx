@@ -1,6 +1,7 @@
 // app/(dashboard)/members/[bioguideId]/page.tsx
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
@@ -13,25 +14,32 @@ import LegislatorCrosswalk from "@/models/LegislatorCrosswalk";
 import { fetchMemberDetail } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import { getTrendingBills } from "@/lib/trending";
+import { getUserVotes } from "@/lib/viewer";
+import { displayName, formatBillNumber, formatDate } from "@/lib/format";
+import { billHref } from "@/lib/routes";
+import { loginHref } from "@/lib/safe-redirect";
 import {
   currentCycle,
   type CandidateTotals,
   type ContributorAggregate,
   type OutsideSpending,
 } from "@/lib/fec";
-import {
-  loadCachedFinance,
-  mongoFinanceStore,
-  liveFecFetcher,
-} from "@/lib/fec-cache";
+import { loadCachedFinance, mongoFinanceStore, liveFecFetcher } from "@/lib/fec-cache";
 import MemberProfileHeader from "@/components/features/MemberProfileHeader";
 import MemberStats from "@/components/features/MemberStats";
 import MemberVoteList from "@/components/features/MemberVoteList";
 import CampaignFinance from "@/components/features/CampaignFinance";
-import GlassCard from "@/components/ui/GlassCard";
+import { SectionHeading } from "@/components/ui/PageHeader";
 
 interface MemberProfilePageProps {
   params: Promise<{ bioguideId: string }>;
+}
+
+export async function generateMetadata({ params }: MemberProfilePageProps): Promise<Metadata> {
+  const { bioguideId } = await params;
+  await connectDB();
+  const score = await MemberScore.findOne({ bioguideId }).select("name").lean().catch(() => null);
+  return { title: score?.name ? displayName(score.name) : "Member of Congress" };
 }
 
 export default async function MemberProfilePage({ params }: MemberProfilePageProps) {
@@ -42,25 +50,17 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
   const detail = await fetchMemberDetail(bioguideId);
   if (!detail) notFound();
 
-  const memberScore = await MemberScore.findOne({ bioguideId }).lean();
+  const [memberScore, session, userVotes] = await Promise.all([
+    MemberScore.findOne({ bioguideId }).lean(),
+    auth(),
+    getUserVotes(),
+  ]);
 
-  const session = await auth();
   let personalAlignment = { score: null as number | null, matching: 0, total: 0 };
-  let userVotedSlugs: string[] = [];
   if (session?.user?.id) {
-    const user = await User.findById(session.user.id)
-      .select("yeaBillSlugs nayBillSlugs")
-      .lean();
+    const user = await User.findById(session.user.id).select("yeaBillSlugs nayBillSlugs").lean();
     if (user) {
-      userVotedSlugs = [
-        ...(user.yeaBillSlugs || []),
-        ...(user.nayBillSlugs || []),
-      ];
-      personalAlignment = await computePersonalAlignment(
-        bioguideId,
-        user.yeaBillSlugs || [],
-        user.nayBillSlugs || []
-      );
+      personalAlignment = await computePersonalAlignment(bioguideId, user.yeaBillSlugs || [], user.nayBillSlugs || []);
     }
   }
 
@@ -68,11 +68,9 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
   let tenureDetail = "";
   if (detail.terms.length > 0) {
     const currentTerm = detail.terms[detail.terms.length - 1];
-    const firstTermInChamber = detail.terms.find(
-      (t) => t.chamber === currentTerm.chamber
-    ) || currentTerm;
+    const firstTermInChamber = detail.terms.find((t) => t.chamber === currentTerm.chamber) || currentTerm;
     tenureYears = new Date().getFullYear() - firstTermInChamber.startYear;
-    tenureDetail = `${currentTerm.chamber} since ${firstTermInChamber.startYear}`;
+    tenureDetail = `In the ${currentTerm.chamber} since ${firstTermInChamber.startYear}`;
   }
 
   // Campaign finance: bioguide → FEC candidate ID via crosswalk → OpenFEC.
@@ -90,23 +88,13 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
     const fecId = (crosswalk.fecIds || [])[0];
     if (fecId && process.env.FEC_API_KEY) {
       try {
-        const finance = await loadCachedFinance(
-          bioguideId,
-          fecId,
-          cycle,
-          mongoFinanceStore,
-          liveFecFetcher
-        );
+        const finance = await loadCachedFinance(bioguideId, fecId, cycle, mongoFinanceStore, liveFecFetcher);
         financeTotals = finance.totals;
         financeIndividuals = finance.topIndividuals;
         financePacs = finance.topPacs;
         financeOutside = finance.outsideSpending;
       } catch (e) {
-        console.error(
-          "FEC lookup failed for",
-          bioguideId,
-          e instanceof Error ? e.message : e
-        );
+        console.error("FEC lookup failed for", bioguideId, e instanceof Error ? e.message : e);
       }
     }
   }
@@ -128,24 +116,26 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
     .filter((mv) => mv.vote === "Yea" || mv.vote === "Nay")
     .map((mv) => {
       const bill = billMap.get(mv.billSlug);
-      const communityPosition = bill
-        ? bill.yeas >= bill.nays ? "Yea" : "Nay"
-        : "N/A";
+      const communityPosition = bill ? (bill.yeas >= bill.nays ? "Yea" : "Nay") : null;
       return {
         billSlug: mv.billSlug,
         congress: mv.congress,
-        title: bill?.title || mv.billSlug,
+        title: bill?.title || formatBillNumber(mv.billSlug),
         memberVote: mv.vote,
         communityPosition,
-        matches: mv.vote === communityPosition,
+        matches: communityPosition ? mv.vote === communityPosition : null,
       };
     });
 
+  const sponsored = detail.sponsoredBills.filter((b) => b.title);
+  const fullName = displayName(detail.name);
+
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="mx-auto max-w-5xl space-y-10 px-4 sm:px-6 lg:px-8">
       <MemberProfileHeader
+        bioguideId={bioguideId}
         name={detail.name}
-        party={detail.party}
+        party={detail.party || memberScore?.party || ""}
         state={detail.state}
         district={detail.district}
         chamber={detail.chamber}
@@ -155,67 +145,83 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         leadership={detail.leadership}
       />
 
-      <MemberStats
-        communityScore={memberScore?.communityScore ?? null}
-        communityDetail={
-          memberScore && memberScore.totalCompared > 0
-            ? `${memberScore.matchingVotes}/${memberScore.totalCompared} votes match`
-            : "no overlap"
-        }
-        personalScore={personalAlignment.score}
-        personalDetail={
-          session
-            ? personalAlignment.total > 0
-              ? `${personalAlignment.matching}/${personalAlignment.total} of your votes`
-              : "no overlap"
-            : "Log in to see"
-        }
-        tenure={tenureYears > 0 ? `${tenureYears} yrs` : "< 1 yr"}
-        tenureDetail={tenureDetail}
-      />
+      <div>
+        <MemberStats
+          communityScore={memberScore?.communityScore ?? null}
+          communityDetail={
+            memberScore && memberScore.totalCompared > 0
+              ? `Matches the community on ${memberScore.matchingVotes} of ${memberScore.totalCompared} votes`
+              : "No votes shared with the community yet"
+          }
+          personalScore={personalAlignment.score}
+          personalDetail={
+            session
+              ? personalAlignment.total > 0
+                ? `Agrees with you on ${personalAlignment.matching} of ${personalAlignment.total} votes`
+                : "Vote on bills this member voted on to compare"
+              : "Log in to compare with your votes"
+          }
+          tenure={tenureYears > 0 ? `${tenureYears} ${tenureYears === 1 ? "year" : "years"}` : "< 1 year"}
+          tenureDetail={tenureDetail}
+        />
+        {!session && (
+          <p className="mt-3 text-sm text-ink-3">
+            <Link
+              href={loginHref(`/members/${bioguideId}`)}
+              className="font-medium text-gold-bright underline-offset-2 hover:underline"
+            >
+              Log in
+            </Link>{" "}
+            to see how often {fullName} votes the way you do.
+          </p>
+        )}
+      </div>
 
-      {detail.committees.length > 0 && (
-        <div>
-          <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-3">
-            Committees
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {detail.committees.map((c) => (
-              <span
-                key={c.name}
-                className="bg-glass-bg border border-glass-border rounded-md px-3 py-1.5 text-cream/60 text-xs"
-              >
-                {c.name}
-              </span>
+      <section aria-labelledby="trending-votes-heading">
+        <SectionHeading
+          id="trending-votes-heading"
+          title="Votes on trending bills"
+          description="How this member voted on the bills the community is engaging with most."
+        />
+        <MemberVoteList
+          votes={trendingVotes}
+          bioguideId={bioguideId}
+          userVotes={userVotes}
+          emptyText="This member hasn't voted on any of this week's trending bills."
+        />
+      </section>
+
+      {sponsored.length > 0 && (
+        <section aria-labelledby="sponsored-heading">
+          <SectionHeading id="sponsored-heading" title="Recently sponsored bills" />
+          <ul className="card divide-y divide-line overflow-hidden">
+            {sponsored.map((b) => (
+              <li key={`${b.billSlug}-${b.congress}`} className="relative px-4 py-3.5 transition-colors hover:bg-white/[0.025]">
+                <p className="text-xs font-semibold text-gold-bright">{formatBillNumber(b.billSlug)}</p>
+                <Link
+                  href={billHref(b.billSlug, b.congress, Boolean(userVotes[b.billSlug]))}
+                  className="stretched-link mt-0.5 block font-medium text-ink line-clamp-2"
+                >
+                  {b.title}
+                </Link>
+                {b.introducedDate && <p className="mt-1 text-xs text-ink-3">Introduced {formatDate(b.introducedDate)}</p>}
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
-      {detail.sponsoredBills.filter((b) => b.title).length > 0 && (
-        <div>
-          <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-3">
-            Recently Sponsored Bills
-          </h2>
-          <div className="space-y-2">
-            {detail.sponsoredBills
-              .filter((b) => b.title)
-              .map((b) => (
-              <Link key={`${b.billSlug}-${b.congress}`} href={`/vote/${b.billSlug}/${b.congress}`} className="block">
-                <GlassCard hover>
-                  <p className="text-cream text-sm font-medium hover:text-gold transition-colors">
-                    {b.billSlug.toUpperCase()} — {b.title}
-                  </p>
-                  {b.introducedDate && (
-                    <p className="text-cream/35 text-xs mt-0.5">
-                      Introduced {b.introducedDate}
-                    </p>
-                  )}
-                </GlassCard>
-              </Link>
+      {detail.committees.length > 0 && (
+        <section aria-labelledby="committees-heading">
+          <SectionHeading id="committees-heading" title="Committees" />
+          <ul className="flex flex-wrap gap-2">
+            {detail.committees.map((c) => (
+              <li key={c.name} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm text-ink-2">
+                {c.name}
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
 
       <CampaignFinance
@@ -225,22 +231,8 @@ export default async function MemberProfilePage({ params }: MemberProfilePagePro
         topPacs={financePacs}
         outsideSpending={financeOutside}
         opensecretsId={opensecretsId}
-        memberName={detail.name}
+        memberName={fullName}
       />
-
-      <div>
-        <h2 className="text-[0.65rem] uppercase tracking-widest text-cream/40 mb-1">
-          Votes on Trending Bills
-        </h2>
-        <p className="text-cream/30 text-xs mb-3">
-          How this member voted on bills the community is engaging with
-        </p>
-        <MemberVoteList
-          votes={trendingVotes}
-          bioguideId={bioguideId}
-          userVotedSlugs={userVotedSlugs}
-        />
-      </div>
     </div>
   );
 }

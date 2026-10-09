@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowUpRight, CalendarDays } from "lucide-react";
 import BallotExplorer from "@/components/features/ballot/BallotExplorer";
@@ -6,6 +7,8 @@ import { exampleBallot } from "@/lib/ballot-demo";
 import styles from "@/components/features/ballot/ballot.module.css";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = { title: "My ballot" };
 
 export default function ElectionsIndexPage() {
   return (

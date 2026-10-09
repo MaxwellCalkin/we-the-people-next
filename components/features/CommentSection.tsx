@@ -1,8 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import GlassCard from "@/components/ui/GlassCard";
-import { MessageSquare, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { MessageSquare, UserRound } from "lucide-react";
+import Alert from "@/components/ui/Alert";
+import Button from "@/components/ui/Button";
+import { formatDate } from "@/lib/format";
+import { loginHref } from "@/lib/safe-redirect";
 
 interface CommentData {
   _id: string;
@@ -14,91 +18,110 @@ interface CommentData {
 interface CommentSectionProps {
   proposalId: string;
   initialComments: CommentData[];
+  canComment: boolean;
 }
 
-export default function CommentSection({
-  proposalId,
-  initialComments,
-}: CommentSectionProps) {
+const MAX_LENGTH = 1000;
+
+export default function CommentSection({ proposalId, initialComments, canComment }: CommentSectionProps) {
   const [comments, setComments] = useState<CommentData[]>(initialComments);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) return;
 
     setLoading(true);
+    setError("");
     try {
       const res = await fetch(`/api/comments/${proposalId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: newComment.trim() }),
       });
-
-      if (res.ok) {
-        const data = await res.json();
-        // Optimistically add comment to the top
-        setComments((prev) => [data.comment, ...prev]);
-        setNewComment("");
-      }
-    } catch (err) {
-      console.error("Error posting comment:", err);
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      setComments((prev) => [data.comment, ...prev]);
+      setNewComment("");
+    } catch {
+      setError("Your comment didn't post. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <h3 className="font-brand text-lg text-cream flex items-center gap-2">
-        <MessageSquare className="h-5 w-5 text-gold" />
-        Comments ({comments.length})
-      </h3>
+    <section aria-labelledby="comments-heading" className="space-y-5">
+      <h2 id="comments-heading" className="flex items-center gap-2 text-lg font-semibold text-ink">
+        <MessageSquare className="h-5 w-5 text-gold-bright" aria-hidden="true" />
+        Discussion
+        <span className="rounded-full bg-white/[0.06] px-2 py-px text-sm font-medium tabular-nums text-ink-3">{comments.length}</span>
+      </h2>
 
-      {/* New Comment Form */}
-      <form onSubmit={handleSubmit} className="flex gap-3">
-        <textarea
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          rows={2}
-          placeholder="Add a comment..."
-          className="flex-1 bg-white/5 border border-glass-border rounded-lg px-4 py-2 text-sm text-cream placeholder:text-cream/50 focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold/50 transition-all resize-none"
-        />
-        <button
-          type="submit"
-          disabled={loading || !newComment.trim()}
-          className="self-end px-4 py-2 rounded-lg bg-gold text-navy-900 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gold/90 transition-colors"
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            "Post"
+      {canComment ? (
+        <form onSubmit={handleSubmit} className="card p-4">
+          <label htmlFor="new-comment" className="sr-only">
+            Add a comment
+          </label>
+          <textarea
+            id="new-comment"
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            rows={3}
+            maxLength={MAX_LENGTH}
+            placeholder="Share your perspective or ask a question…"
+            className="field resize-y"
+          />
+          {error && (
+            <Alert tone="error" className="mt-3">
+              {error}
+            </Alert>
           )}
-        </button>
-      </form>
-
-      {/* Comments List */}
-      {comments.length === 0 ? (
-        <p className="text-cream/40 text-sm">
-          No comments yet. Be the first to share your thoughts!
-        </p>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-xs text-ink-3">Comments are shown without your name.</span>
+            <Button type="submit" size="sm" loading={loading} disabled={!newComment.trim()}>
+              Post comment
+            </Button>
+          </div>
+        </form>
       ) : (
-        <div className="space-y-3">
-          {comments.map((c) => (
-            <GlassCard key={c._id} className="!py-3 !px-4">
-              <p className="text-cream text-sm">{c.comment}</p>
-              <p className="text-cream/30 text-xs mt-2">
-                {new Date(c.createdAt).toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </p>
-            </GlassCard>
-          ))}
+        <div className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-2">Log in to join the discussion.</p>
+          <Link
+            href={loginHref(`/proposal/${proposalId}`)}
+            className="text-sm font-semibold text-gold-bright underline-offset-4 hover:underline"
+          >
+            Log in to comment
+          </Link>
         </div>
       )}
-    </div>
+
+      {comments.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-line-strong px-5 py-8 text-center text-sm text-ink-3">
+          No comments yet. Start the conversation.
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {comments.map((c) => (
+            <li key={c._id} className="flex gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-3 text-ink-3 ring-1 ring-line-strong">
+                <UserRound className="h-4 w-4" aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-line bg-surface px-4 py-3">
+                <p className="text-xs text-ink-3">
+                  Community member ·{" "}
+                  <time dateTime={c.createdAt} suppressHydrationWarning>
+                    {formatDate(c.createdAt)}
+                  </time>
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">{c.comment}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

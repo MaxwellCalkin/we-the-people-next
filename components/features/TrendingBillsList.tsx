@@ -1,85 +1,47 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import GlassCard from "@/components/ui/GlassCard";
-
-interface TrendingBill {
-  billSlug: string;
-  congress: string;
-  title: string;
-  trendingScore: number;
-  totalVotes: number;
-}
+import { Flame } from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
+import RankedBillList from "./RankedBillList";
+import type { TrendingBill } from "@/lib/trending";
 
 interface TrendingBillsListProps {
-  userVotedSlugs: string[];
+  bills: TrendingBill[];
+  userVotes: Record<string, "Yea" | "Nay">;
+  onBrowseNew?: () => void;
 }
 
-export default function TrendingBillsList({ userVotedSlugs }: TrendingBillsListProps) {
-  const [bills, setBills] = useState<TrendingBill[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch("/api/bills/trending")
-      .then((r) => r.json())
-      .then((data) => setBills(data.bills || []))
-      .catch((err) => console.error("Failed to fetch trending:", err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="glass-card h-20 animate-pulse rounded-xl" />
-        ))}
-      </div>
-    );
-  }
-
+export default function TrendingBillsList({ bills, userVotes, onBrowseNew }: TrendingBillsListProps) {
   if (bills.length === 0) {
     return (
-      <div className="glass-card text-center py-12">
-        <p className="text-cream/60">No trending bills yet.</p>
-        <p className="text-cream/40 text-sm mt-2">
-          Bills will appear here as the community votes on them.
-        </p>
-      </div>
+      <EmptyState
+        icon={Flame}
+        title="Nothing is trending yet"
+        description="Bills show up here once people start voting on them. Be one of the first: pick a new bill and cast your vote."
+        action={
+          onBrowseNew && (
+            <button
+              type="button"
+              onClick={onBrowseNew}
+              className="text-sm font-semibold text-gold-bright underline-offset-4 hover:underline"
+            >
+              Browse the newest bills
+            </button>
+          )
+        }
+      />
     );
   }
 
   return (
-    <div className="space-y-3">
-      {bills.map((bill, i) => {
-        const hasVoted = userVotedSlugs.includes(bill.billSlug);
-        return (
-          <Link
-            key={bill.billSlug}
-            href={hasVoted ? `/vote/${bill.billSlug}/${bill.congress}/voted` : `/vote/${bill.billSlug}/${bill.congress}`}
-            className="block"
-          >
-            <GlassCard hover>
-              <div className="flex items-center gap-4">
-                <span className={`font-bold text-sm w-8 text-center shrink-0 ${i === 0 ? "text-gold" : "text-cream/40"}`}>
-                  #{i + 1}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-cream text-sm font-semibold line-clamp-2">
-                    {bill.title}
-                  </h3>
-                  <p className="text-cream/40 text-xs mt-1">
-                    {bill.totalVotes} community vote{bill.totalVotes !== 1 ? "s" : ""} recently
-                  </p>
-                </div>
-                <span className={`text-sm font-medium shrink-0 ${hasVoted ? "text-gold" : "text-cream"} transition-colors`}>
-                  {hasVoted ? "Voted ✓" : "Vote →"}
-                </span>
-              </div>
-            </GlassCard>
-          </Link>
-        );
-      })}
-    </div>
+    <RankedBillList
+      userVotes={userVotes}
+      bills={bills.map((b) => ({
+        billSlug: b.billSlug,
+        congress: b.congress,
+        title: b.title,
+        yeas: b.yeas,
+        nays: b.nays,
+        activity: `${b.totalVotes.toLocaleString("en-US")} ${b.totalVotes === 1 ? "vote" : "votes"} this week`,
+      }))}
+    />
   );
 }

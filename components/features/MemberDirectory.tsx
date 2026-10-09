@@ -1,9 +1,13 @@
 // components/features/MemberDirectory.tsx
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
+import { Search, UserX } from "lucide-react";
 import MemberCard from "./MemberCard";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { displayName, partyInfo } from "@/lib/format";
 
 interface MemberData {
   bioguideId: string;
@@ -22,138 +26,165 @@ interface MemberDirectoryProps {
 }
 
 type SortOption = "alignment" | "name" | "state";
+type Chamber = "All" | "House" | "Senate";
+
+const PAGE = 50;
 
 export default function MemberDirectory({ members }: MemberDirectoryProps) {
   const [search, setSearch] = useState("");
-  const [chamber, setChamber] = useState<"All" | "House" | "Senate">("All");
+  const [chamber, setChamber] = useState<Chamber>("All");
   const [stateFilter, setStateFilter] = useState("All");
   const [partyFilter, setPartyFilter] = useState("All");
   const [sort, setSort] = useState<SortOption>("alignment");
+  const [visible, setVisible] = useState(PAGE);
 
-  const states = useMemo(() => {
-    const s = [...new Set(members.map((m) => m.state))].sort();
-    return ["All", ...s];
-  }, [members]);
-
-  const parties = useMemo(() => {
-    const p = [...new Set(members.map((m) => m.party))].sort();
-    return ["All", ...p];
-  }, [members]);
+  const states = useMemo(() => [...new Set(members.map((m) => m.state))].sort(), [members]);
+  const parties = useMemo(() => [...new Set(members.map((m) => m.party).filter(Boolean))].sort(), [members]);
 
   const filtered = useMemo(() => {
-    let result = members;
+    const q = search.trim().toLowerCase();
+    const result = members.filter(
+      (m) =>
+        (!q || m.name.toLowerCase().includes(q) || displayName(m.name).toLowerCase().includes(q)) &&
+        (chamber === "All" || m.chamber === chamber) &&
+        (stateFilter === "All" || m.state === stateFilter) &&
+        (partyFilter === "All" || m.party === partyFilter)
+    );
 
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((m) => m.name.toLowerCase().includes(q));
-    }
-    if (chamber !== "All") {
-      result = result.filter((m) => m.chamber === chamber);
-    }
-    if (stateFilter !== "All") {
-      result = result.filter((m) => m.state === stateFilter);
-    }
-    if (partyFilter !== "All") {
-      result = result.filter((m) => m.party === partyFilter);
-    }
-
-    result = [...result].sort((a, b) => {
+    return [...result].sort((a, b) => {
       if (sort === "alignment") {
-        if (a.communityScore === null && b.communityScore === null) return 0;
+        if (a.communityScore === null && b.communityScore === null) return displayName(a.name).localeCompare(displayName(b.name));
         if (a.communityScore === null) return 1;
         if (b.communityScore === null) return -1;
-        return b.communityScore - a.communityScore;
+        // Same score: the larger sample of shared votes ranks higher.
+        return b.communityScore - a.communityScore || b.totalCompared - a.totalCompared;
       }
       if (sort === "name") return a.name.localeCompare(b.name);
-      if (sort === "state") return a.state.localeCompare(b.state) || a.name.localeCompare(b.name);
-      return 0;
+      return a.state.localeCompare(b.state) || a.name.localeCompare(b.name);
     });
-
-    return result;
   }, [members, search, chamber, stateFilter, partyFilter, sort]);
 
-  const ranked = filtered.map((m, i) => ({
-    ...m,
-    rank: sort === "alignment" && m.communityScore !== null ? i + 1 : null,
-  }));
+  const filtersActive = search !== "" || chamber !== "All" || stateFilter !== "All" || partyFilter !== "All";
+  const resetFilters = () => {
+    setSearch("");
+    setChamber("All");
+    setStateFilter("All");
+    setPartyFilter("All");
+    setVisible(PAGE);
+  };
 
-  const selectClass =
-    "bg-glass-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-cream/70 focus:outline-none focus:border-gold/40";
+  // Show the first page again whenever the filters change.
+  const filterKey = `${search}|${chamber}|${stateFilter}|${partyFilter}|${sort}`;
+  const [lastKey, setLastKey] = useState(filterKey);
+  if (filterKey !== lastKey) {
+    setLastKey(filterKey);
+    setVisible(PAGE);
+  }
 
   return (
     <div>
-      <div className="flex flex-wrap gap-3 mb-6">
-        <input
-          type="text"
-          placeholder="Search by name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-[200px] bg-glass-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-cream placeholder:text-cream/40 focus:outline-none focus:border-gold/40"
-        />
-        <select
+      <div className="card mb-5 grid gap-3 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-[minmax(0,1.2fr)_auto_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(10rem,0.9fr)] lg:items-center">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" aria-hidden="true" />
+          <input
+            type="search"
+            placeholder="Search by name…"
+            aria-label="Search members by name"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="field h-10 pl-9"
+          />
+        </div>
+        <SegmentedControl
+          label="Chamber"
           value={chamber}
-          onChange={(e) => setChamber(e.target.value as "All" | "House" | "Senate")}
-          className={selectClass}
-        >
-          <option value="All">All Chambers</option>
-          <option value="House">House</option>
-          <option value="Senate">Senate</option>
-        </select>
-        <select
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
-          className={selectClass}
-        >
+          onChange={setChamber}
+          options={[
+            { value: "All", label: "All" },
+            { value: "House", label: "House" },
+            { value: "Senate", label: "Senate" },
+          ]}
+        />
+        <select aria-label="State" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)} className="field h-10 text-sm">
+          <option value="All">All states</option>
           {states.map((s) => (
             <option key={s} value={s}>
-              {s === "All" ? "All States" : s}
+              {s}
             </option>
           ))}
         </select>
-        <select
-          value={partyFilter}
-          onChange={(e) => setPartyFilter(e.target.value)}
-          className={selectClass}
-        >
+        <select aria-label="Party" value={partyFilter} onChange={(e) => setPartyFilter(e.target.value)} className="field h-10 text-sm">
+          <option value="All">All parties</option>
           {parties.map((p) => (
             <option key={p} value={p}>
-              {p === "All" ? "All Parties" : p}
+              {partyInfo(p).label}
             </option>
           ))}
         </select>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortOption)}
-          className={selectClass}
-        >
+        <select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value as SortOption)} className="field h-10 text-sm">
           <option value="alignment">Sort: Alignment</option>
-          <option value="name">Sort: Name A-Z</option>
+          <option value="name">Sort: Last name</option>
           <option value="state">Sort: State</option>
         </select>
       </div>
 
-      <p className="text-cream/40 text-sm mb-4">
-        {filtered.length} member{filtered.length !== 1 ? "s" : ""}
-      </p>
-
-      <div className="space-y-2">
-        {ranked.map((m) => (
-          <Link key={m.bioguideId} href={`/members/${m.bioguideId}`}>
-            <MemberCard
-              rank={m.rank}
-              bioguideId={m.bioguideId}
-              name={m.name}
-              party={m.party}
-              state={m.state}
-              district={m.district}
-              chamber={m.chamber}
-              communityScore={m.communityScore}
-              matchingVotes={m.matchingVotes}
-              totalCompared={m.totalCompared}
-            />
-          </Link>
-        ))}
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-ink-3" aria-live="polite">
+          {filtered.length === members.length
+            ? `${members.length.toLocaleString("en-US")} members`
+            : `${filtered.length.toLocaleString("en-US")} of ${members.length.toLocaleString("en-US")} members`}
+        </p>
+        {filtersActive && (
+          <button type="button" onClick={resetFilters} className="text-sm font-medium text-gold-bright hover:text-gold">
+            Clear filters
+          </button>
+        )}
       </div>
+
+      {filtered.length === 0 ? (
+        <EmptyState
+          compact
+          icon={UserX}
+          title="No members match those filters"
+          description="Try a different name or widen the chamber, state, or party filters."
+          action={
+            <Button variant="secondary" size="sm" onClick={resetFilters}>
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {filtered.slice(0, visible).map((m, i) => (
+              <li key={m.bioguideId}>
+                <MemberCard
+                  rank={sort === "alignment" && m.communityScore !== null ? i + 1 : null}
+                  bioguideId={m.bioguideId}
+                  name={m.name}
+                  party={m.party}
+                  state={m.state}
+                  district={m.district}
+                  chamber={m.chamber}
+                  communityScore={m.communityScore}
+                  matchingVotes={m.matchingVotes}
+                  totalCompared={m.totalCompared}
+                />
+              </li>
+            ))}
+          </ul>
+          {visible < filtered.length && (
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <Button variant="secondary" onClick={() => setVisible((v) => v + PAGE)}>
+                Show more members
+              </Button>
+              <p className="text-xs text-ink-3">
+                Showing {visible} of {filtered.length}
+              </p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -1,96 +1,102 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { FileQuestion, Vote } from "lucide-react";
 import { auth } from "@/lib/auth";
-import connectDB from "@/lib/db";
 import { fetchBillDetails } from "@/lib/congress";
-import User from "@/models/User";
-import GlassCard from "@/components/ui/GlassCard";
+import { getUserVotes } from "@/lib/viewer";
+import { formatBillNumber } from "@/lib/format";
+import { loginHref } from "@/lib/safe-redirect";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import { ButtonLink } from "@/components/ui/Button";
+import BillHeader, { govtrackUrl } from "@/components/features/BillHeader";
 import VoteForm from "@/components/features/VoteForm";
-import { ExternalLink } from "lucide-react";
 import AiSummaryPrompt from "@/components/features/AiSummaryPrompt";
 
 interface VotePageProps {
   params: Promise<{ slug: string; congress: string }>;
 }
 
+export async function generateMetadata({ params }: VotePageProps): Promise<Metadata> {
+  const { slug } = await params;
+  return { title: `Vote on ${formatBillNumber(slug)}` };
+}
+
 export default async function VotePage({ params }: VotePageProps) {
-  const session = await auth();
-  if (!session) redirect("/login");
-
-  await connectDB();
   const { slug, congress } = await params;
+  const [session, userVotes] = await Promise.all([auth(), getUserVotes()]);
 
-  // Check if user already voted
-  const user = await User.findById(session.user.id).lean();
-  if (user) {
-    const allVoted = [
-      ...(user.yeaBillSlugs || []),
-      ...(user.nayBillSlugs || []),
-    ];
-    if (allVoted.includes(slug)) {
-      redirect(`/vote/${slug}/${congress}/voted`);
-    }
+  if (userVotes[slug]) redirect(`/vote/${slug}/${congress}/voted`);
+
+  const bill = await fetchBillDetails(congress, slug).catch(() => null);
+  if (!bill) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <EmptyState
+          icon={FileQuestion}
+          title="We couldn't find that bill"
+          description="It may have a different number, or Congress.gov may be temporarily unavailable."
+          action={<ButtonLink href="/bills">Browse bills</ButtonLink>}
+        />
+      </div>
+    );
   }
 
-  const bill = await fetchBillDetails(congress, slug);
-  if (!bill) redirect("/bills");
-
-  // Build govtrack URL
-  const govtrackUrl = `https://www.govtrack.us/congress/bills/${congress}/${bill.bill_slug}`;
+  const title = bill.short_title || bill.title;
+  const returnTo = `/vote/${slug}/${congress}`;
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <GlassCard>
-        <h1 className="font-brand text-2xl sm:text-3xl text-gradient mb-4">
-          {bill.short_title || bill.title}
-        </h1>
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <BillHeader bill={bill} />
 
-        {bill.summary && (
-          <p className="text-cream/70 text-sm leading-relaxed mb-6">
-            {bill.summary}
-          </p>
-        )}
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="space-y-6">
+          <Card as="section" aria-labelledby="summary-heading">
+            <h2 id="summary-heading" className="text-lg font-semibold text-ink">
+              Summary
+            </h2>
+            {bill.summary ? (
+              <>
+                <p className="mt-3 whitespace-pre-line leading-relaxed text-ink-2">{bill.summary}</p>
+                <p className="mt-4 text-xs text-ink-3">Summary by the Congressional Research Service via Congress.gov.</p>
+              </>
+            ) : (
+              <p className="mt-3 leading-relaxed text-ink-2">
+                The Congressional Research Service hasn&apos;t published a summary of this bill yet. Read the full
+                text, or use the prompt below to get a plain-English breakdown.
+              </p>
+            )}
+          </Card>
 
-        {bill.sponsor && (
-          <p className="text-cream/50 text-xs mb-2">
-            Sponsor: {bill.sponsor}
-          </p>
-        )}
-
-        {bill.latest_major_action && (
-          <p className="text-cream/50 text-xs mb-4">
-            Latest Action: {bill.latest_major_action}
-          </p>
-        )}
-
-        <a
-          href={govtrackUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-gold text-sm hover:text-gold/80 transition-colors mb-8"
-        >
-          View on GovTrack <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-
-        <AiSummaryPrompt
-          billTitle={bill.short_title || bill.title}
-          govtrackUrl={govtrackUrl}
-          hasSummary={!!bill.summary}
-        />
-
-        <div className="border-t border-glass-border pt-6">
-          <h2 className="font-brand text-xl text-cream mb-4">
-            Cast Your Vote
-          </h2>
-          <VoteForm
-            billSlug={bill.bill_slug}
-            congress={bill.congress}
-            title={bill.short_title || bill.title}
-            summary={bill.summary || ""}
-          />
+          <AiSummaryPrompt billTitle={title} govtrackUrl={govtrackUrl(bill.congress, bill.bill_slug)} hasSummary={!!bill.summary} />
         </div>
-      </GlassCard>
+
+        <aside className="lg:sticky lg:top-24">
+          <Card as="section" aria-labelledby="vote-heading" className="shadow-pop">
+            <h2 id="vote-heading" className="flex items-center gap-2 text-lg font-semibold text-ink">
+              <Vote className="h-5 w-5 text-gold-bright" aria-hidden="true" />
+              How would you vote?
+            </h2>
+            <p className="mt-1.5 mb-5 text-sm leading-relaxed text-ink-2">
+              We&apos;ll show you how the community voted and whether your senators and representative agree with you.
+            </p>
+            {session ? (
+              <VoteForm billSlug={bill.bill_slug} congress={bill.congress} title={title} summary={bill.summary || ""} />
+            ) : (
+              <div className="space-y-3">
+                <ButtonLink href={loginHref(returnTo, "/signup")} size="lg" fullWidth>
+                  Create a free account to vote
+                </ButtonLink>
+                <ButtonLink href={loginHref(returnTo)} variant="secondary" size="lg" fullWidth>
+                  Log in
+                </ButtonLink>
+              </div>
+            )}
+          </Card>
+        </aside>
+      </div>
     </div>
   );
 }

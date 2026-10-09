@@ -9,6 +9,14 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+vi.mock("next/link", () => ({
+  default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 afterEach(() => {
   cleanup();
   mockPush.mockClear();
@@ -78,11 +86,14 @@ describe("RollCallTable", () => {
   it("shows correct vote counts in the Yea-Nay summary", () => {
     render(<RollCallTable rollCall={rollCall} />);
 
-    // Yea count = 1, Nay count = 1
-    const yeaSpan = screen.getByText("1", { selector: ".text-emerald-400" });
-    const naySpan = screen.getByText("1", { selector: ".text-red-400" });
-    expect(yeaSpan).toBeInTheDocument();
-    expect(naySpan).toBeInTheDocument();
+    expect(screen.getByText("1 Yea, 1 Nay")).toBeInTheDocument();
+  });
+
+  it("links member names to their profiles so keyboard users can reach them", () => {
+    render(<RollCallTable rollCall={rollCall} />);
+
+    expect(screen.getByRole("link", { name: "John Smith" })).toHaveAttribute("href", "/members/S000001");
+    expect(screen.queryByRole("link", { name: "No Id Member" })).not.toBeInTheDocument();
   });
 
   it("filters members when a vote filter is clicked", async () => {

@@ -1,8 +1,9 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight, Landmark } from "lucide-react";
 import connectDB from "@/lib/db";
 import { currentCycle } from "@/lib/fec";
 import {
@@ -14,11 +15,17 @@ import {
   liveRosterFetcher,
 } from "@/lib/election-cache";
 import { getStateInfo } from "@/lib/states";
-import GlassCard from "@/components/ui/GlassCard";
 import UpcomingElectionsCalendar from "@/components/features/UpcomingElectionsCalendar";
+import PageHeader, { SectionHeading } from "@/components/ui/PageHeader";
 
 interface StatePageProps {
   params: Promise<{ state: string }>;
+}
+
+export async function generateMetadata({ params }: StatePageProps): Promise<Metadata> {
+  const { state } = await params;
+  const info = getStateInfo(state);
+  return { title: info ? `${info.name} federal races` : "Elections" };
 }
 
 export default async function StateElectionsPage({ params }: StatePageProps) {
@@ -31,33 +38,27 @@ export default async function StateElectionsPage({ params }: StatePageProps) {
   const cycle = currentCycle();
   const [datesResult, senateResult] = await Promise.allSettled([
     loadElectionDates(state, cycle, mongoDatesStore, liveDatesFetcher),
-    loadRoster(
-      { state, office: "S", district: "", cycle },
-      cycle,
-      mongoRosterStore,
-      liveRosterFetcher
-    ),
+    loadRoster({ state, office: "S", district: "", cycle }, cycle, mongoRosterStore, liveRosterFetcher),
   ]);
   const dates = datesResult.status === "fulfilled" ? datesResult.value : [];
   const senateCount = senateResult.status === "fulfilled" ? senateResult.value.length : null;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <header>
-        <p className="text-cream/70 text-xs uppercase tracking-widest mb-2">
-          <Link href="/elections" className="hover:text-cream">Elections</Link>
-          <span className="mx-2">/</span>Federal research
-        </p>
-        <h1 className="font-brand text-3xl sm:text-4xl text-gradient">{info.name}</h1>
-        <p className="text-cream/75 text-sm mt-2 max-w-2xl leading-relaxed">
-          Explore federal candidate records and campaign finance for the {cycle - 1}–{cycle} cycle.
-          These FEC records do not confirm who will appear on your ballot and do
-          not include state or local contests.
-        </p>
-        <Link href="/elections" className="inline-block text-gold text-sm mt-3 hover:underline">
-          Find official ballot information →
-        </Link>
-      </header>
+    <div className="mx-auto max-w-5xl space-y-10 px-4 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumbs={[{ label: "Elections", href: "/elections" }, { label: info.name }]}
+        eyebrow="Federal research"
+        title={info.name}
+        description={
+          <>
+            Explore federal candidate records and campaign finance for the {cycle - 1}–{cycle} cycle. These FEC records
+            don&apos;t confirm who will appear on your ballot and don&apos;t include state or local contests.{" "}
+            <Link href="/elections" className="font-medium text-gold-bright underline-offset-2 hover:underline">
+              Look up your ballot
+            </Link>
+          </>
+        }
+      />
 
       <UpcomingElectionsCalendar
         dates={dates}
@@ -66,57 +67,70 @@ export default async function StateElectionsPage({ params }: StatePageProps) {
         subtitle="Statewide dates from the FEC. A date may not apply to your address or primary eligibility; confirm with your election office."
       />
 
-      <section>
-        <h2 className="font-brand text-xl text-cream mb-3">U.S. Senate research</h2>
-        <Link href={`/elections/${state}/senate`} className="block">
-          <GlassCard hover>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-brand text-lg text-cream">{info.name} Senate candidate records</h3>
-                <p className="text-cream/75 text-sm mt-2">
-                  {senateCount === null
-                    ? "FEC candidate information is temporarily unavailable. Open the research page to try again."
-                    : senateCount === 0
-                      ? "No candidate records were returned for this search. That does not establish whether a Senate election will be held."
-                      : `${senateCount} candidate record${senateCount === 1 ? "" : "s"} returned by the FEC. Filing does not establish ballot qualification.`}
-                </p>
-                <p className="text-gold text-sm mt-3">Explore candidates and campaign finance →</p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-cream/65 shrink-0 mt-1" />
-            </div>
-          </GlassCard>
-        </Link>
+      <section aria-labelledby="senate-heading">
+        <SectionHeading id="senate-heading" title="U.S. Senate" />
+        <div className="card card-interactive group flex items-start gap-4 p-5">
+          <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gold/10 text-gold-bright ring-1 ring-gold/25">
+            <Landmark className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <Link href={`/elections/${state}/senate`} className="stretched-link font-semibold text-ink">
+              {info.name} Senate candidate records
+            </Link>
+            <p className="mt-1 text-sm text-ink-2">
+              {senateCount === null
+                ? "FEC candidate information is temporarily unavailable. Open the research page to try again."
+                : senateCount === 0
+                  ? "No candidate records were returned. That doesn't establish whether a Senate election will be held."
+                  : `${senateCount} candidate record${senateCount === 1 ? "" : "s"} from the FEC. Filing doesn't establish ballot qualification.`}
+            </p>
+            <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-gold-bright">
+              Explore candidates and campaign finance
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+            </span>
+          </div>
+        </div>
       </section>
 
-      {info.houseDistricts > 0 && (
-        <section>
-          <h2 className="font-brand text-xl text-cream">
-            U.S. House — {info.houseDistricts} district{info.houseDistricts === 1 ? "" : "s"}
-          </h2>
-          <p className="text-cream/75 text-sm mt-2 mb-4 leading-relaxed">
-            Choose a district to research FEC candidate records and campaign finance.
-            {info.houseDistricts === 1 && ` ${info.name} has one at-large House seat.`}
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+      {info.houseDistricts > 0 ? (
+        <section aria-labelledby="house-heading">
+          <SectionHeading
+            id="house-heading"
+            title={`U.S. House · ${info.houseDistricts} district${info.houseDistricts === 1 ? "" : "s"}`}
+            description={
+              info.houseDistricts === 1
+                ? `${info.name} has one at-large House seat.`
+                : "Choose a district to research FEC candidate records and campaign finance."
+            }
+          />
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: info.houseDistricts }, (_, i) => i + 1).map((n) => {
               const padded = String(n).padStart(2, "0");
               return (
-                <Link
-                  key={padded}
-                  href={`/elections/${state}/house/${padded}`}
-                  className="rounded-md border border-glass-border bg-glass-bg px-3 py-3 text-sm text-cream/85 hover:text-cream hover:border-gold/50 transition-colors text-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-                >
-                  {info.houseDistricts === 1 ? "At-large district" : `District ${n}`} <span className="text-cream/60">{state}-{padded}</span>
-                </Link>
+                <li key={padded}>
+                  <Link
+                    href={`/elections/${state}/house/${padded}`}
+                    className="group flex items-center justify-between gap-2 rounded-xl border border-line bg-surface px-3 py-3 text-sm transition-colors hover:border-gold/50"
+                  >
+                    <span>
+                      <span className="block font-medium text-ink">
+                        {info.houseDistricts === 1 ? "At-large" : `District ${n}`}
+                      </span>
+                      <span className="text-xs text-ink-3">
+                        {state}-{padded}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-ink-3 group-hover:text-ink" aria-hidden="true" />
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </section>
-      )}
-      {info.houseDistricts === 0 && (
-        <p className="text-cream/75 text-sm">
-          House delegate research is not available here yet. Use your official
-          election office for the contests on your ballot.
+      ) : (
+        <p className="rounded-2xl border border-dashed border-line-strong px-5 py-6 text-sm text-ink-2">
+          House delegate research isn&apos;t available here yet. Use your official election office for the contests on your
+          ballot.
         </p>
       )}
     </div>

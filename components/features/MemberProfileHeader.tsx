@@ -1,8 +1,15 @@
 // components/features/MemberProfileHeader.tsx
-import Image from "next/image";
 import Link from "next/link";
+import { ExternalLink, ListChecks, Phone } from "lucide-react";
+import Avatar from "@/components/ui/Avatar";
+import PartyBadge from "@/components/ui/PartyBadge";
+import Badge from "@/components/ui/Badge";
+import { Breadcrumbs } from "@/components/ui/PageHeader";
+import { buttonClasses } from "@/components/ui/Button";
+import { displayName, seatLabel } from "@/lib/format";
 
 interface MemberProfileHeaderProps {
+  bioguideId: string;
   name: string;
   party: string;
   state: string;
@@ -15,6 +22,7 @@ interface MemberProfileHeaderProps {
 }
 
 export default function MemberProfileHeader({
+  bioguideId,
   name,
   party,
   state,
@@ -25,51 +33,43 @@ export default function MemberProfileHeader({
   phone,
   leadership,
 }: MemberProfileHeaderProps) {
-  const location = chamber === "Senate" ? state : `${state}-${district}`;
+  const fullName = displayName(name);
+  const role = chamber === "Senate" ? "Senator" : "Representative";
 
   return (
-    <div>
-      <Link href="/members" className="text-cream/30 text-sm hover:text-cream/50 transition-colors">
-        ← Back to Directory
-      </Link>
-      <div className="flex gap-6 mt-4">
-        <div className="w-[120px] h-[150px] rounded-xl overflow-hidden border-2 border-gold/30 shrink-0 bg-navy-800">
-          <Image
-            src={imageUrl}
-            alt={name}
-            width={120}
-            height={150}
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div>
-          <p className="text-cream/40 text-xs uppercase tracking-widest">
-            {chamber === "Senate" ? "Senator" : "Representative"} · {location}
+    <header>
+      <Breadcrumbs items={[{ label: "Members", href: "/members" }, { label: fullName }]} className="mb-5" />
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <Avatar src={imageUrl} name={fullName} size={112} shape="rounded" variant="neutral" className="ring-1 ring-line-strong" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-ink-3">
+            {role} · {seatLabel(chamber, state, district)}
           </p>
-          <h1 className="font-brand text-2xl sm:text-3xl text-gradient mt-1">
-            {name}
-          </h1>
-          <p className="text-cream/50 text-sm mt-1">
-            {party}
-            {leadership && <span className="text-cream/40"> · {leadership}</span>}
-          </p>
-          <div className="flex gap-3 mt-3">
+          <h1 className="mt-1 font-brand text-[2.1rem] font-semibold leading-tight text-ink sm:text-[2.6rem]">{fullName}</h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <PartyBadge party={party} />
+            {leadership && <Badge tone="gold">{leadership}</Badge>}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={`/members/${bioguideId}/votes`} className={buttonClasses({ size: "sm" })}>
+              <ListChecks className="h-4 w-4" aria-hidden="true" />
+              Voting record
+            </Link>
             {website && (
-              <a
-                href={website}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-gold bg-gold/10 px-3 py-1.5 rounded-md border border-gold/20 hover:bg-gold/20 transition-colors"
-              >
-                Website ↗
+              <a href={website} target="_blank" rel="noopener noreferrer" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+                Official website
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
             )}
             {phone && (
-              <span className="text-xs text-cream/40 px-3 py-1.5">{phone}</span>
+              <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className={buttonClasses({ variant: "ghost", size: "sm" })}>
+                <Phone className="h-4 w-4" aria-hidden="true" />
+                {phone}
+              </a>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </header>
   );
 }

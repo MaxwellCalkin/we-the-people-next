@@ -1,116 +1,88 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import GlassCard from "@/components/ui/GlassCard";
-
-interface TopBill {
-  billSlug: string;
-  congress: string;
-  title: string;
-  voteCount: number;
-}
+import { useEffect, useState } from "react";
+import { Trophy } from "lucide-react";
+import EmptyState from "@/components/ui/EmptyState";
+import SegmentedControl from "@/components/ui/SegmentedControl";
+import { SkeletonRow } from "@/components/ui/Skeleton";
+import Alert from "@/components/ui/Alert";
+import RankedBillList from "./RankedBillList";
+import type { TopBill } from "@/lib/trending";
 
 type Period = "day" | "week" | "month" | "year";
 
+const PERIODS: { value: Period; label: string; phrase: string }[] = [
+  { value: "day", label: "Today", phrase: "today" },
+  { value: "week", label: "This week", phrase: "this week" },
+  { value: "month", label: "This month", phrase: "this month" },
+  { value: "year", label: "This year", phrase: "this year" },
+];
+
 interface TopBillsListProps {
-  userVotedSlugs: string[];
+  userVotes: Record<string, "Yea" | "Nay">;
 }
 
-export default function TopBillsList({ userVotedSlugs }: TopBillsListProps) {
-  const [bills, setBills] = useState<TopBill[]>([]);
-  const [loadedPeriod, setLoadedPeriod] = useState<Period | null>(null);
+export default function TopBillsList({ userVotes }: TopBillsListProps) {
   const [period, setPeriod] = useState<Period>("week");
-
-  // Loading while the currently selected period has not yet been fetched.
-  const loading = loadedPeriod !== period;
+  const [result, setResult] = useState<{ period: Period; bills: TopBill[]; failed: boolean } | null>(null);
+  const loading = result?.period !== period;
 
   useEffect(() => {
     let ignore = false;
     fetch(`/api/bills/top?period=${period}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (ignore) return;
-        setBills(data.bills || []);
-        setLoadedPeriod(period);
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
       })
-      .catch((err) => {
-        if (ignore) return;
-        console.error("Failed to fetch top bills:", err);
-        setLoadedPeriod(period);
+      .then((data) => {
+        if (!ignore) setResult({ period, bills: data.bills || [], failed: false });
+      })
+      .catch(() => {
+        if (!ignore) setResult({ period, bills: [], failed: true });
       });
     return () => {
       ignore = true;
     };
   }, [period]);
 
-  const periodLabels: Record<Period, string> = {
-    day: "Today",
-    week: "This Week",
-    month: "This Month",
-    year: "This Year",
-  };
+  const phrase = PERIODS.find((p) => p.value === period)!.phrase;
 
   return (
     <div>
-      <div className="flex gap-2 mb-6">
-        {(["day", "week", "month", "year"] as Period[]).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-              period === p
-                ? "bg-gold/20 text-gold border border-gold/30"
-                : "bg-glass-bg text-cream/50 border border-glass-border hover:text-cream"
-            }`}
-          >
-            {periodLabels[p]}
-          </button>
-        ))}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink-3">Bills with the most community votes {phrase}.</p>
+        <SegmentedControl label="Time period" options={PERIODS} value={period} onChange={setPeriod} size="sm" />
       </div>
 
       {loading ? (
-        <div className="space-y-4">
+        <div className="space-y-3" role="status" aria-label="Loading most-voted bills">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="glass-card h-20 animate-pulse rounded-xl" />
+            <SkeletonRow key={i} />
           ))}
         </div>
-      ) : bills.length === 0 ? (
-        <div className="glass-card text-center py-12">
-          <p className="text-cream/60">No bills with votes {periodLabels[period].toLowerCase()}.</p>
-        </div>
+      ) : result.failed ? (
+        <Alert tone="error" title="We couldn't load the most-voted bills.">
+          Check your connection and try again in a moment.
+        </Alert>
+      ) : result.bills.length === 0 ? (
+        <EmptyState
+          compact
+          icon={Trophy}
+          title={`No votes ${phrase} yet`}
+          description="Try a longer time period, or vote on a bill to get things started."
+        />
       ) : (
-        <div className="space-y-3">
-          {bills.map((bill, i) => {
-            const hasVoted = userVotedSlugs.includes(bill.billSlug);
-            return (
-              <Link
-                key={bill.billSlug}
-                href={hasVoted ? `/vote/${bill.billSlug}/${bill.congress}/voted` : `/vote/${bill.billSlug}/${bill.congress}`}
-                className="block"
-              >
-                <GlassCard hover>
-                  <div className="flex items-center gap-4">
-                    <span className={`font-bold text-sm w-8 text-center shrink-0 ${i === 0 ? "text-gold" : "text-cream/40"}`}>
-                      #{i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-cream text-sm font-semibold line-clamp-2">
-                        {bill.title}
-                      </h3>
-                      <p className="text-cream/40 text-xs mt-1">
-                        {bill.voteCount} vote{bill.voteCount !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <span className={`text-sm font-medium shrink-0 ${hasVoted ? "text-gold" : "text-cream"} transition-colors`}>
-                      {hasVoted ? "Voted ✓" : "Vote →"}
-                    </span>
-                  </div>
-                </GlassCard>
-              </Link>
-            );
-          })}
-        </div>
+        <RankedBillList
+          userVotes={userVotes}
+          bills={result.bills.map((b) => ({
+            billSlug: b.billSlug,
+            congress: b.congress,
+            title: b.title,
+            yeas: b.yeas,
+            nays: b.nays,
+            activity: `${b.voteCount.toLocaleString("en-US")} ${b.voteCount === 1 ? "vote" : "votes"} ${phrase}`,
+          }))}
+        />
       )}
     </div>
   );

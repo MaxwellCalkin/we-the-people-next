@@ -13,30 +13,26 @@ interface StatePickerProps {
 }
 
 export default function StatePicker({
-  title = "Browse Federal Races by State",
+  title = "Browse federal races by state",
   subtitle = "Explore FEC candidate records and campaign finance. These lists are not official ballots.",
 }: StatePickerProps) {
   return (
-    <section id="browse" className="scroll-mt-20">
-      <h2 className="font-brand text-lg text-cream mb-1">{title}</h2>
-      {subtitle && (
-        <p className="text-cream/75 text-sm mb-4 leading-relaxed">
-          {subtitle}
-        </p>
-      )}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+    <section id="browse" className="scroll-mt-24">
+      <h2 className="text-lg font-semibold text-ink">{title}</h2>
+      {subtitle && <p className="mt-1 mb-4 text-sm leading-relaxed text-ink-2">{subtitle}</p>}
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {STATES.map((s) => (
-          <Link
-            key={s.code}
-            href={`/elections/${s.code}`}
-            className="flex items-center gap-2 rounded-md px-3 py-3 text-sm border border-glass-border bg-glass-bg text-cream/85 hover:text-cream hover:border-gold/50 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-            title={s.name}
-          >
-            <span className="text-gold text-xs font-medium w-5 shrink-0">{s.code}</span>
-            <span>{s.name}</span>
-          </Link>
+          <li key={s.code}>
+            <Link
+              href={`/elections/${s.code}`}
+              className="flex items-center gap-2.5 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm text-ink-2 transition-colors hover:border-gold/50 hover:text-ink"
+            >
+              <span className="w-6 shrink-0 text-xs font-semibold text-gold-bright">{s.code}</span>
+              <span className="truncate">{s.name}</span>
+            </Link>
+          </li>
         ))}
-      </div>
+      </ul>
     </section>
   );
 }

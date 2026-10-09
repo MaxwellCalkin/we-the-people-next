@@ -6,19 +6,24 @@ import Bill from "@/models/Bill";
 const HALF_LIFE_HOURS = 24;
 const LAMBDA = Math.LN2 / HALF_LIFE_HOURS;
 
-interface TrendingBill {
+export interface TrendingBill {
   billSlug: string;
   congress: string;
   title: string;
   trendingScore: number;
   totalVotes: number;
+  /** All-time community totals for the bill. */
+  yeas: number;
+  nays: number;
 }
 
-interface TopBill {
+export interface TopBill {
   billSlug: string;
   congress: string;
   title: string;
   voteCount: number;
+  yeas: number;
+  nays: number;
 }
 
 /**
@@ -61,9 +66,11 @@ export async function getTrendingBills(limit = 20): Promise<TrendingBill[]> {
 
   const slugs = sorted.map(([slug]) => slug);
   const bills = await Bill.find({ billSlug: { $in: slugs } })
-    .select("billSlug congress title")
+    .select("billSlug congress title yeas nays")
     .lean();
-  const titleMap = new Map(bills.map((b) => [b.billSlug, { title: b.title, congress: b.congress }]));
+  const titleMap = new Map(
+    bills.map((b) => [b.billSlug, { title: b.title, congress: b.congress, yeas: b.yeas, nays: b.nays }])
+  );
 
   return sorted.map(([slug, data]) => ({
     billSlug: slug,
@@ -71,6 +78,8 @@ export async function getTrendingBills(limit = 20): Promise<TrendingBill[]> {
     title: titleMap.get(slug)?.title || slug,
     trendingScore: Math.round(data.score * 100) / 100,
     totalVotes: data.count,
+    yeas: titleMap.get(slug)?.yeas ?? 0,
+    nays: titleMap.get(slug)?.nays ?? 0,
   }));
 }
 
@@ -103,14 +112,18 @@ export async function getTopBills(
 
   const slugs = results.map((r: { _id: string }) => r._id);
   const bills = await Bill.find({ billSlug: { $in: slugs } })
-    .select("billSlug congress title")
+    .select("billSlug congress title yeas nays")
     .lean();
-  const titleMap = new Map(bills.map((b) => [b.billSlug, { title: b.title, congress: b.congress }]));
+  const titleMap = new Map(
+    bills.map((b) => [b.billSlug, { title: b.title, congress: b.congress, yeas: b.yeas, nays: b.nays }])
+  );
 
   return results.map((r: { _id: string; congress: string; voteCount: number }) => ({
     billSlug: r._id,
     congress: titleMap.get(r._id)?.congress || r.congress,
     title: titleMap.get(r._id)?.title || r._id,
     voteCount: r.voteCount,
+    yeas: titleMap.get(r._id)?.yeas ?? 0,
+    nays: titleMap.get(r._id)?.nays ?? 0,
   }));
 }

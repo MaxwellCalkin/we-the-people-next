@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import GlassCard from "@/components/ui/GlassCard";
-import ProposalCard from "@/components/features/ProposalCard";
 import Link from "next/link";
+import { FileText, Lightbulb, ListChecks, Megaphone } from "lucide-react";
+import ProposalCard from "@/components/features/ProposalCard";
+import EmptyState from "@/components/ui/EmptyState";
+import { VoteBadge } from "@/components/ui/Badge";
+import { ButtonLink } from "@/components/ui/Button";
+import { TabList, TabPanel } from "@/components/ui/Tabs";
+import { formatBillNumber } from "@/lib/format";
 
 interface VoteEntry {
   bill: {
@@ -32,94 +37,76 @@ export default function ProfileTabs({ votes, proposals }: ProfileTabsProps) {
   const [activeTab, setActiveTab] = useState<"votes" | "proposals">("votes");
 
   return (
-    <div>
-      {/* Tab Buttons */}
-      <div className="flex gap-6 mb-6 border-b border-glass-border">
-        <button
-          onClick={() => setActiveTab("votes")}
-          className={`pb-3 text-sm font-semibold transition-colors relative ${
-            activeTab === "votes"
-              ? "text-gold"
-              : "text-cream/50 hover:text-cream"
-          }`}
-        >
-          Votes ({votes.length})
-          {activeTab === "votes" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold rounded-full" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("proposals")}
-          className={`pb-3 text-sm font-semibold transition-colors relative ${
-            activeTab === "proposals"
-              ? "text-gold"
-              : "text-cream/50 hover:text-cream"
-          }`}
-        >
-          Proposals ({proposals.length})
-          {activeTab === "proposals" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gold rounded-full" />
-          )}
-        </button>
-      </div>
+    <section aria-label="Your activity">
+      <TabList
+        label="Your activity"
+        prefix="profile"
+        value={activeTab}
+        onChange={setActiveTab}
+        className="mb-6"
+        items={[
+          { id: "votes", label: "My votes", count: votes.length, icon: <ListChecks className="h-4 w-4" aria-hidden="true" /> },
+          { id: "proposals", label: "My proposals", count: proposals.length, icon: <Megaphone className="h-4 w-4" aria-hidden="true" /> },
+        ]}
+      />
 
-      {/* Votes Tab */}
-      {activeTab === "votes" && (
-        <div className="space-y-3">
-          {votes.length === 0 ? (
-            <p className="text-cream/40 text-sm">
-              You haven&apos;t voted on any bills yet.
-            </p>
+      <TabPanel prefix="profile" active={activeTab}>
+        {activeTab === "votes" &&
+          (votes.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="You haven't voted on any bills yet"
+              description="Vote Yea or Nay on a bill and we'll start comparing your choices with your representatives' votes."
+              action={<ButtonLink href="/bills">Find a bill to vote on</ButtonLink>}
+            />
           ) : (
-            votes.map((v, idx) => (
-              <GlassCard key={idx} hover>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
+            <ul className="card divide-y divide-line overflow-hidden">
+              {votes.map((v, idx) => (
+                <li
+                  key={v.bill?._id ?? idx}
+                  className="relative flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-white/[0.025]"
+                >
+                  <div className="min-w-0 flex-1">
                     {v.bill ? (
-                      <Link
-                        href={`/vote/${v.bill.billSlug}/${v.bill.congress}/voted`}
-                        className="text-cream text-sm font-medium hover:text-gold transition-colors line-clamp-2"
-                      >
-                        {v.bill.title}
-                      </Link>
+                      <>
+                        <p className="text-xs font-semibold text-gold-bright">{formatBillNumber(v.bill.billSlug)}</p>
+                        <Link
+                          href={`/vote/${v.bill.billSlug}/${v.bill.congress}/voted`}
+                          className="stretched-link mt-0.5 block font-medium text-ink line-clamp-2"
+                        >
+                          {v.bill.title}
+                        </Link>
+                      </>
                     ) : (
-                      <span className="text-cream/40 text-sm">
-                        Bill data unavailable
-                      </span>
+                      <span className="text-sm text-ink-3">This bill&apos;s details aren&apos;t available.</span>
                     )}
                   </div>
-                  <span
-                    className={`ml-4 px-3 py-1 rounded-full text-xs font-bold shrink-0 ${
-                      v.position === "Yea"
-                        ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-red-500/20 text-red-400"
-                    }`}
-                  >
-                    {v.position}
+                  <span className="flex shrink-0 items-center gap-2 text-xs text-ink-3">
+                    You voted <VoteBadge vote={v.position} />
                   </span>
-                </div>
-              </GlassCard>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Proposals Tab */}
-      {activeTab === "proposals" && (
-        <div>
-          {proposals.length === 0 ? (
-            <p className="text-cream/40 text-sm">
-              You haven&apos;t created any proposals yet.
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {proposals.map((proposal) => (
-                <ProposalCard key={proposal._id} proposal={proposal} />
+                </li>
               ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            </ul>
+          ))}
+
+        {activeTab === "proposals" &&
+          (proposals.length === 0 ? (
+            <EmptyState
+              icon={Lightbulb}
+              title="You haven't proposed a bill yet"
+              description="Got an idea for a law? Write it up and see who in your district and around the country supports it."
+              action={<ButtonLink href="/proposals/new">Propose a bill</ButtonLink>}
+            />
+          ) : (
+            <ul className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {proposals.map((proposal) => (
+                <li key={proposal._id}>
+                  <ProposalCard proposal={proposal} />
+                </li>
+              ))}
+            </ul>
+          ))}
+      </TabPanel>
+    </section>
   );
 }

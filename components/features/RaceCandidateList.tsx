@@ -3,7 +3,10 @@
 // FEC research records, ordered alphabetically rather than by fundraising.
 // These records do not establish ballot qualification or official ballot order.
 
+import { UserSearch } from "lucide-react";
 import CandidateCard from "./CandidateCard";
+import Alert from "@/components/ui/Alert";
+import EmptyState from "@/components/ui/EmptyState";
 import type { CandidateTotals } from "@/lib/fec";
 import type { IRosterCandidate } from "@/models/ElectionRosterCache";
 
@@ -25,36 +28,33 @@ export default function RaceCandidateList({
 }: RaceCandidateListProps) {
   if (unavailable) {
     return (
-      <p role="status" className="rounded-lg border border-gold/30 bg-gold/5 p-4 text-cream/80 text-sm">
-        Candidate information is temporarily unavailable. Please try again later
-        or check your election office’s official sample ballot.
-      </p>
+      <Alert tone="warning" title="Candidate information is temporarily unavailable.">
+        Please try again later, or check your election office&apos;s official sample ballot.
+      </Alert>
     );
   }
   if (candidates.length === 0) {
-    return <p className="text-cream/75 text-sm">{emptyMessage}</p>;
+    return <EmptyState compact icon={UserSearch} title="No candidate records" description={emptyMessage} />;
   }
 
-  const sorted = [...candidates].sort((a, b) =>
-    a.candidate.name.localeCompare(b.candidate.name)
-  );
+  const sorted = [...candidates].sort((a, b) => a.candidate.name.localeCompare(b.candidate.name));
 
   return (
-    <section aria-label="FEC candidate research">
-      <p className="text-cream/75 text-sm mb-4 leading-relaxed">
-        FEC candidate records, in alphabetical order. Filing and fundraising
-        records are not confirmation of ballot qualification. Official ballot
-        order may differ.
+    <section aria-labelledby="candidates-heading">
+      <h2 id="candidates-heading" className="text-lg font-semibold text-ink">
+        Candidates who filed with the FEC
+      </h2>
+      <p className="mt-1 mb-4 text-sm leading-relaxed text-ink-3">
+        Listed alphabetically. Filing and fundraising records don&apos;t confirm who qualifies for the ballot, and the
+        official ballot order may differ.
       </p>
-    <div className="grid sm:grid-cols-2 gap-4">
-      {sorted.map((c) => (
-        <CandidateCard
-          key={c.candidate.fecId}
-          candidate={c.candidate}
-          totals={c.totals}
-        />
-      ))}
-    </div>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        {sorted.map((c) => (
+          <li key={c.candidate.fecId}>
+            <CandidateCard candidate={c.candidate} totals={c.totals} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

@@ -21,12 +21,15 @@ vi.mock("next/link", () => ({
 
 vi.mock("next/image", () => ({
   default: (props: Record<string, unknown>) => (
+    // eslint-disable-next-line @next/next/no-img-element
     <img {...props} alt={(props.alt as string) || ""} />
   ),
 }));
 
+let mockPathname = "/bills";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => mockPathname,
 }));
 
 const mockSignOut = vi.fn();
@@ -37,58 +40,73 @@ vi.mock("next-auth/react", () => ({
 afterEach(() => {
   cleanup();
   mockSignOut.mockClear();
+  mockPathname = "/bills";
+  document.body.style.overflow = "";
 });
 
 describe("Navbar", () => {
-  it("renders the logo linking to /profile", () => {
+  it("links the logo to the profile for signed-in users", () => {
     render(<Navbar userName="Alice" />);
-    const logo = screen.getByText("Heard");
-    expect(logo.closest("a")).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("link", { name: "Heard home" })).toHaveAttribute("href", "/profile");
   });
 
-  it("renders Bills, Members, Feed, and How It Works nav links", () => {
-    render(<Navbar userName="Alice" />);
-    const billsLinks = screen.getAllByRole("link", { name: "Bills" });
-    expect(billsLinks.length).toBeGreaterThanOrEqual(1);
-    expect(billsLinks[0]).toHaveAttribute("href", "/bills");
+  it("links the logo to the landing page for visitors", () => {
+    render(<Navbar />);
+    expect(screen.getByRole("link", { name: "Heard home" })).toHaveAttribute("href", "/");
+  });
 
-    const membersLinks = screen.getAllByRole("link", { name: "Members" });
-    expect(membersLinks[0]).toHaveAttribute("href", "/members");
+  it("renders the main section links", () => {
+    render(<Navbar userName="Alice" />);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("link", { name: "Bills" })).toHaveAttribute("href", "/bills");
+    expect(within(nav).getByRole("link", { name: "Members" })).toHaveAttribute("href", "/members");
+    expect(within(nav).getByRole("link", { name: "Elections" })).toHaveAttribute("href", "/elections");
+    expect(within(nav).getByRole("link", { name: "Proposals" })).toHaveAttribute("href", "/proposals");
+  });
+
+  it("marks the section for the current page, including nested routes", () => {
+    mockPathname = "/vote/hr1/119";
+    render(<Navbar userName="Alice" />);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("link", { name: "Bills" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Members" })).not.toHaveAttribute("aria-current");
   });
 
   it("does not render Profile as a top-level desktop nav link", () => {
     render(<Navbar userName="Alice" />);
-    const nav = screen.getAllByRole("navigation")[0];
-    const desktopLinks = within(nav).getAllByRole("link");
-    const desktopLinkTexts = desktopLinks.map((l) => l.textContent);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const desktopLinkTexts = within(nav)
+      .getAllByRole("link")
+      .map((l) => l.textContent);
     expect(desktopLinkTexts).not.toContain("Profile");
   });
 
-  it("shows avatar dropdown with Profile and Logout when avatar button is clicked", async () => {
-    const user = userEvent.setup();
-    render(<Navbar userName="Alice" />);
-
-    const menuButtons = screen.getAllByRole("button", { name: "User menu" });
-    await user.click(menuButtons[0]);
-
-    const profileLinks = screen.getAllByRole("link", { name: "Profile" });
-    expect(profileLinks.length).toBeGreaterThanOrEqual(1);
-    expect(profileLinks[0]).toHaveAttribute("href", "/profile");
+  it("shows Log in and Sign up instead of an account menu when nobody is signed in", () => {
+    render(<Navbar userName="" />);
+    expect(screen.getByRole("link", { name: "Log in" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Sign up" })).toHaveAttribute("href", "/signup");
+    expect(screen.queryByRole("button", { name: "User menu" })).not.toBeInTheDocument();
   });
 
-  it("calls signOut when Logout is clicked in the avatar dropdown", async () => {
+  it("shows avatar dropdown with Profile and Log out when avatar button is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Navbar userName="Alice" district="PA-12" />);
+
+    const menuButton = screen.getByRole("button", { name: "User menu" });
+    expect(menuButton).toHaveAttribute("aria-expanded", "false");
+    await user.click(menuButton);
+
+    expect(menuButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Profile" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByText("Voting district PA-12")).toBeInTheDocument();
+  });
+
+  it("calls signOut when Log out is clicked in the avatar dropdown", async () => {
     const user = userEvent.setup();
     render(<Navbar userName="Alice" />);
 
-    const menuButtons = screen.getAllByRole("button", { name: "User menu" });
-    await user.click(menuButtons[0]);
-
-    const dropdownContainer = menuButtons[0].closest(".relative")!;
-    const logoutBtn = within(dropdownContainer as HTMLElement).getByRole(
-      "button",
-      { name: /logout/i }
-    );
-    await user.click(logoutBtn);
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    await user.click(screen.getByRole("button", { name: /log out/i }));
 
     expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: "/" });
   });
@@ -97,23 +115,24 @@ describe("Navbar", () => {
     const user = userEvent.setup();
     render(<Navbar userName="Alice" />);
 
-    const menuButtons = screen.getAllByRole("button", { name: "User menu" });
-    await user.click(menuButtons[0]);
-
-    const dropdownContainer = menuButtons[0].closest(".relative")!;
-    expect(
-      within(dropdownContainer as HTMLElement).queryByRole("button", {
-        name: /logout/i,
-      })
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "User menu" }));
+    expect(screen.getByRole("button", { name: /log out/i })).toBeInTheDocument();
 
     await user.click(document.body);
 
-    expect(
-      within(dropdownContainer as HTMLElement).queryByRole("button", {
-        name: /logout/i,
-      })
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /log out/i })).not.toBeInTheDocument();
+  });
+
+  it("closes the avatar dropdown with Escape and returns focus to the menu button", async () => {
+    const user = userEvent.setup();
+    render(<Navbar userName="Alice" />);
+
+    const menuButton = screen.getByRole("button", { name: "User menu" });
+    await user.click(menuButton);
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("button", { name: /log out/i })).not.toBeInTheDocument();
+    expect(menuButton).toHaveFocus();
   });
 
   it("renders user initials in the avatar when no image is provided", () => {
@@ -121,15 +140,19 @@ describe("Navbar", () => {
     expect(screen.getAllByText("AB").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("opens mobile sidebar when hamburger menu is clicked", async () => {
+  it("opens the mobile menu, locks page scroll, and closes it with Escape", async () => {
     const user = userEvent.setup();
     render(<Navbar userName="Alice" />);
 
-    const hamburgers = screen.getAllByRole("button", { name: "Toggle menu" });
-    await user.click(hamburgers[0]);
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
 
-    expect(
-      screen.getAllByRole("button", { name: "Close menu" }).length
-    ).toBeGreaterThanOrEqual(1);
+    const dialog = screen.getByRole("dialog", { name: "Menu" });
+    expect(within(dialog).getByRole("button", { name: "Close menu" })).toHaveFocus();
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
   });
 });
