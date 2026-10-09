@@ -1,4 +1,5 @@
 import { lookupBallot } from "@/lib/ballot-provider";
+import { ballotLookupThrottle } from "@/lib/ballot-quota";
 import type { BallotLookupResponse } from "@/lib/ballot-types";
 
 export const runtime = "nodejs";
@@ -49,6 +50,17 @@ export async function POST(request: Request) {
   }
   if (electionId !== undefined && (typeof electionId !== "string" || !/^\d{1,20}$/.test(electionId) || electionId === "2000")) {
     return invalid("Choose a valid election and try again.");
+  }
+  // Only requests that would reach Google count toward the limits, so typos don't lock people out.
+  const decision = ballotLookupThrottle.check(request.headers);
+  if (!decision.allowed) {
+    return Response.json(
+      {
+        status: "rate_limited",
+        message: "Too many ballot lookups right now. Please wait a few minutes and try again, or use your election office’s official lookup.",
+      } satisfies BallotLookupResponse,
+      { status: 429, headers: { ...HEADERS, "Retry-After": String(decision.retryAfterSeconds) } }
+    );
   }
   const result = await lookupBallot(address.trim(), electionId as string | undefined);
   return Response.json(result, { headers: HEADERS });

@@ -58,7 +58,7 @@ export interface BallotData {
 }
 
 export interface BallotLookupResponse {
-  status: "ready" | "unavailable" | "not_configured" | "election_required" | "invalid_address";
+  status: "ready" | "unavailable" | "not_configured" | "election_required" | "invalid_address" | "rate_limited";
   message?: string;
   ballot?: BallotData;
   elections?: BallotElection[];

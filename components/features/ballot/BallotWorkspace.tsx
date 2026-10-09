@@ -12,9 +12,19 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
+/** Per-ballot preparation kept above the party-keyed view, so switching primary ballots doesn't discard it. */
+interface PreparationDraft {
+  preparation: BallotPreparation;
+  saveOnDevice: boolean;
+  hasEdited: boolean;
+}
+
+const newDraft = (): PreparationDraft => ({ preparation: emptyPreparation(), saveOnDevice: false, hasEdited: false });
+
 export default function BallotWorkspace({ ballot, onChangeLocation }: { ballot: BallotData; onChangeLocation: () => void }) {
   const parties = Array.from(new Set(ballot.contests.map((contest) => contest.primaryParty).filter((party): party is string => Boolean(party))));
   const [party, setParty] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, PreparationDraft>>({});
   const needsParty = parties.length > 0;
   const hasNonpartisan = ballot.contests.some((contest) => !contest.primaryParty);
   const contests = ballot.contests.filter((contest) => !contest.primaryParty || (party !== "__nonpartisan__" && contest.primaryParty === party));
@@ -24,14 +34,12 @@ export default function BallotWorkspace({ ballot, onChangeLocation }: { ballot: 
     <div className={styles.electionHeading}><div><p className={styles.eyebrow}>{ballot.coverage === "sample" ? "Explore the experience" : "Your election"}</p><h2>{ballot.election.name}</h2><div className={styles.electionMeta}><span><CalendarDays size={16} aria-hidden="true" /> {formatDate(ballot.election.date)}</span><span><MapPin size={16} aria-hidden="true" /> {ballot.locationLabel}</span></div></div></div>
     <div className={`${styles.coverage} ${ballot.coverage === "sample" ? styles.exampleCoverage : ""}`}><ShieldCheck size={22} aria-hidden="true" /><div><strong>{ballot.coverage === "sample" ? "Fictional example — not your actual ballot" : "Available ballot information · Completeness not confirmed"}</strong><p>{ballot.coverage === "sample" ? "Try choosing candidates, comparing information, and making notes. All names, questions, and voting details here are illustrative." : "Some races, local offices, or questions may be missing. Check your election office’s official sample ballot for the complete wording, order, and instructions."}</p>{ballot.coverage !== "sample" && <span className={styles.small}>Retrieved {formatDate(ballot.checkedAt)} · Address lookup does not confirm registration or eligibility.</span>}</div></div>
     {needsParty && <div className={styles.partyPicker}><label htmlFor="primary-party">Which primary ballot are you preparing for?</label><select id="primary-party" value={party} onChange={(event) => setParty(event.target.value)}><option value="">Choose a ballot</option>{parties.map((name) => <option key={name} value={name}>{name}</option>)}{hasNonpartisan && <option value="__nonpartisan__">Nonpartisan contests only</option>}</select><p className={styles.small}>The available party contests are shown by the source. Confirm which primary you’re eligible to vote in with your election office.</p></div>}
-    {needsParty && !party ? <p className={styles.notice}>Choose a party ballot above to view its contests and your preparation notes.</p> : <PreparationView key={`${ballot.id}:${party}`} ballot={ballot} contests={contests} party={party} />}
+    {needsParty && !party ? <p className={styles.notice}>Choose a party ballot above to view its contests and your preparation notes.</p> : <PreparationView key={`${ballot.id}:${party}`} ballot={ballot} contests={contests} party={party} draft={drafts[party] ?? newDraft()} onDraftChange={(draft) => setDrafts((previous) => ({ ...previous, [party]: draft }))} />}
   </section>;
 }
 
-function PreparationView({ ballot, contests, party }: { ballot: BallotData; contests: BallotContest[]; party: string }) {
-  const [preparation, setPreparation] = useState<BallotPreparation>(emptyPreparation);
-  const [saveOnDevice, setSaveOnDevice] = useState(false);
-  const [hasEdited, setHasEdited] = useState(false);
+function PreparationView({ ballot, contests, party, draft, onDraftChange }: { ballot: BallotData; contests: BallotContest[]; party: string; draft: PreparationDraft; onDraftChange: (draft: PreparationDraft) => void }) {
+  const { preparation, saveOnDevice, hasEdited } = draft;
   const [storageMessage, setStorageMessage] = useState("");
   const [filter, setFilter] = useState("All contests");
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -42,8 +50,7 @@ function PreparationView({ ballot, contests, party }: { ballot: BallotData; cont
   const filtered = contests.filter((contest) => (filter === "All contests" || contest.level === filter) && (!reviewOnly || !preparation.reviewed.includes(contest.id)));
 
   function update(next: BallotPreparation) {
-    setHasEdited(true);
-    setPreparation(next);
+    onDraftChange({ ...draft, hasEdited: true, preparation: next });
     if (!saveOnDevice) return;
     try { localStorage.setItem(storageKey, JSON.stringify(next)); setStorageMessage("Saved on this browser."); }
     catch { setStorageMessage("This browser couldn’t save your changes. Keep this page open or print your preparation."); }
@@ -51,21 +58,23 @@ function PreparationView({ ballot, contests, party }: { ballot: BallotData; cont
 
   function setSaving(enabled: boolean) {
     if (enabled) {
+      let next = draft;
       try {
         const stored = localStorage.getItem(storageKey);
         const restore = Boolean(stored) && !hasEdited;
-        const next = restore ? sanitizePreparation(JSON.parse(stored!), contests) : preparation;
-        setPreparation(next); localStorage.setItem(storageKey, JSON.stringify(next)); setSaveOnDevice(true);
+        next = { ...draft, preparation: restore ? sanitizePreparation(JSON.parse(stored!), contests) : preparation };
+        localStorage.setItem(storageKey, JSON.stringify(next.preparation));
+        onDraftChange({ ...next, saveOnDevice: true });
         setStorageMessage(restore ? "Previous preparation restored for this ballot." : "Saved on this browser.");
-      } catch { setSaveOnDevice(false); setStorageMessage("Saving isn’t available in this browser. You can still prepare and print during this visit."); }
+      } catch { onDraftChange({ ...next, saveOnDevice: false }); setStorageMessage("Saving isn’t available in this browser. You can still prepare and print during this visit."); }
     } else {
-      try { localStorage.removeItem(storageKey); setSaveOnDevice(false); setStorageMessage("Saved copy removed. Your current notes stay open until you leave."); }
+      try { localStorage.removeItem(storageKey); onDraftChange({ ...draft, saveOnDevice: false }); setStorageMessage("Saved copy removed. Your current notes stay open until you leave."); }
       catch { setStorageMessage("The saved copy couldn’t be removed. Try clearing this site’s browser data."); }
     }
   }
 
   function clearPreparation() {
-    try { localStorage.removeItem(storageKey); setSaveOnDevice(false); setHasEdited(true); setPreparation(emptyPreparation()); setStorageMessage("Choices and notes cleared for this ballot."); }
+    try { localStorage.removeItem(storageKey); onDraftChange({ preparation: emptyPreparation(), saveOnDevice: false, hasEdited: true }); setStorageMessage("Choices and notes cleared for this ballot."); }
     catch { setStorageMessage("The saved copy couldn’t be removed. Try clearing this site’s browser data."); }
   }
 

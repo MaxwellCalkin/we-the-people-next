@@ -155,4 +155,24 @@ describe("Navbar", () => {
     expect(screen.queryByRole("dialog", { name: "Menu" })).not.toBeInTheDocument();
     expect(document.body.style.overflow).toBe("");
   });
+
+  it("keeps keyboard focus inside the open mobile menu", async () => {
+    const user = userEvent.setup();
+    render(<Navbar userName="Alice" />);
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }));
+    const dialog = screen.getByRole("dialog", { name: "Menu" });
+    const close = within(dialog).getByRole("button", { name: "Close menu" });
+    const logOut = within(dialog).getByRole("button", { name: /log out/i });
+
+    await user.tab({ shift: true });
+    expect(logOut).toHaveFocus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    for (let i = 0; i < 15; i++) {
+      await user.tab();
+      expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    }
+  });
 });

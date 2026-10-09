@@ -38,6 +38,9 @@ export const NAV_LINKS = [
   { href: "/how-it-works", label: "How It Works", icon: BookOpen },
 ];
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function isActive(pathname: string, href: string) {
   if (href === "/proposals") return pathname === "/proposals" || pathname.startsWith("/proposal");
   if (href === "/bills") return pathname.startsWith("/bills") || pathname.startsWith("/vote");
@@ -53,6 +56,7 @@ export default function Navbar({ userName, userImage, district }: NavbarProps) {
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   // Close menus whenever the route changes.
   const [lastPath, setLastPath] = useState(pathname);
@@ -88,7 +92,26 @@ export default function Navbar({ userName, userImage, district }: NavbarProps) {
     closeButtonRef.current?.focus();
     const hamburger = hamburgerRef.current;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMobileOpen(false);
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        return;
+      }
+      // The drawer is aria-modal: keep Tab and Shift+Tab cycling inside it.
+      const drawer = drawerRef.current;
+      if (e.key !== "Tab" || !drawer) return;
+      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const inside = active instanceof Node && drawer.contains(active);
+      if (e.shiftKey && (active === first || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => {
@@ -215,7 +238,7 @@ export default function Navbar({ userName, userImage, district }: NavbarProps) {
       </header>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-[60] lg:hidden" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
+        <div ref={drawerRef} className="fixed inset-0 z-[60] lg:hidden" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
           <div className="absolute inset-0 bg-navy-950/70 backdrop-blur-sm animate-fade-in" onClick={() => setMobileOpen(false)} />
           <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col border-l border-line bg-surface shadow-pop animate-fade-in">
             <div className="flex h-16 items-center justify-between border-b border-line px-4">

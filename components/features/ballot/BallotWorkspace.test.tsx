@@ -139,11 +139,41 @@ describe("BallotWorkspace", () => {
     await user.click(screen.getByRole("checkbox", { name: "Save notes on this device" }));
 
     await user.selectOptions(partyPicker, "Example Party A");
-    await user.click(screen.getByRole("checkbox", { name: "Save notes on this device" }));
+    expect(screen.getByRole("checkbox", { name: "Save notes on this device" })).toBeChecked();
     const returningA = contestCard("School board").queries;
     expect(returningA.getByRole("checkbox", { name: /Avery Patel/ })).toBeChecked();
     expect(returningA.getByRole("checkbox", { name: /Riley Brooks/ })).not.toBeChecked();
     expect(returningA.getByRole("textbox", { name: "My research notes" })).toHaveValue("Notes for the A ballot.");
+  });
+
+  it("keeps unsaved choices and notes when switching to another primary ballot and back", async () => {
+    const user = userEvent.setup();
+    const ballot: BallotData = {
+      ...exampleBallot,
+      id: "example-primary-unsaved",
+      contests: [
+        exampleBallot.contests[2],
+        { ...exampleBallot.contests[0], id: "primary-a-house", primaryParty: "Example Party A" },
+        { ...exampleBallot.contests[1], id: "primary-b-state-house", primaryParty: "Example Party B" },
+      ],
+    };
+    showBallot(ballot);
+    const partyPicker = screen.getByRole("combobox", { name: "Which primary ballot are you preparing for?" });
+    await user.selectOptions(partyPicker, "Example Party A");
+    const partyA = contestCard("School board").queries;
+    await user.click(partyA.getByRole("checkbox", { name: /Avery Patel/ }));
+    await user.type(partyA.getByRole("textbox", { name: "My research notes" }), "Still comparing these two.");
+    await user.click(partyA.getByRole("checkbox", { name: "I’ve reviewed this contest" }));
+    expect(screen.getByRole("checkbox", { name: "Save notes on this device" })).not.toBeChecked();
+
+    await user.selectOptions(partyPicker, "Example Party B");
+    await user.selectOptions(partyPicker, "Example Party A");
+
+    const returning = contestCard("School board").queries;
+    expect(returning.getByRole("checkbox", { name: /Avery Patel/ })).toBeChecked();
+    expect(returning.getByRole("textbox", { name: "My research notes" })).toHaveValue("Still comparing these two.");
+    expect(returning.getByRole("checkbox", { name: "I’ve reviewed this contest" })).toBeChecked();
+    expect(localStorage.length).toBe(0);
   });
 
   it.each(["choice", "note"] as const)("preserves a fresh %s instead of replacing it with a previously saved preparation", async (edit) => {
@@ -204,7 +234,7 @@ describe("BallotWorkspace", () => {
     await user.click(screen.getByRole("checkbox", { name: "Save notes on this device" }));
 
     await user.selectOptions(partyPicker, screen.getByRole("option", { name: "Nonpartisan contests only" }));
-    await user.click(screen.getByRole("checkbox", { name: "Save notes on this device" }));
+    expect(screen.getByRole("checkbox", { name: "Save notes on this device" })).toBeChecked();
     const returning = contestCard("School board").queries;
     expect(returning.getByRole("checkbox", { name: /Avery Patel/ })).toBeChecked();
     expect(returning.getByRole("checkbox", { name: /Riley Brooks/ })).not.toBeChecked();
