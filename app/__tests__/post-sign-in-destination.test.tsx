@@ -114,8 +114,9 @@ describe("after signing in", () => {
         jsonResponse({ state: "vt", districts: [{ number: 0, proportion: 1 }] })
       )
       .mockResolvedValueOnce(jsonResponse({ success: true }));
+    mockAuth.mockResolvedValue({ user: { id: "u1", email: "new@example.com" } });
     const user = userEvent.setup({ delay: null });
-    render(<OnboardingPage />);
+    render(await OnboardingPage());
 
     await user.type(screen.getByLabelText("ZIP code"), "05401");
     await user.click(screen.getByRole("button", { name: "Find my district" }));
