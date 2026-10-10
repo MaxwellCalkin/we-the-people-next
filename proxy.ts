@@ -21,11 +21,9 @@ export default auth((req) => {
     }
   }
 
-  const response = NextResponse.next();
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  return response;
+  // Security headers come from next.config.ts so they also cover the routes
+  // this proxy skips.
+  return NextResponse.next();
 });
 
 export const config = {

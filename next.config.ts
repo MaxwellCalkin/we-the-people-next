@@ -1,6 +1,18 @@
 import type { NextConfig } from "next";
 
+// Sent on every response, including pages the proxy skips (/login, /signup,
+// /onboarding) and API routes. X-Frame-Options blocks clickjacking, which
+// matters most on the login page.
+const securityHeaders = [
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+];
+
 const nextConfig: NextConfig = {
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
   images: {
     remotePatterns: [
       {

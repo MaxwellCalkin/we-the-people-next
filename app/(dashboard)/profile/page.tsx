@@ -11,6 +11,7 @@ import Bill from "@/models/Bill";
 import { fetchRepresentatives } from "@/lib/congress";
 import { computePersonalAlignment } from "@/lib/member-votes";
 import { loginHref } from "@/lib/safe-redirect";
+import { memberPhotoUrl } from "@/lib/format";
 import ProfileHeader from "@/components/features/ProfileHeader";
 import ProfileTabs from "@/components/features/ProfileTabs";
 
@@ -51,7 +52,7 @@ export default async function ProfilePage() {
         name: rep.name,
         party: rep.party,
         role: rep.role,
-        imageUrl: `https://www.congress.gov/img/member/${rep.id.toLowerCase()}_200.jpg`,
+        imageUrl: rep.imageUrl ?? memberPhotoUrl(rep.id),
         alignment: await computePersonalAlignment(rep.id, yeaSlugs, naySlugs),
       }))
     ),

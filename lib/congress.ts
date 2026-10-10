@@ -1,4 +1,5 @@
 import type { BillResult, MemberResult, VotePosition } from "@/types";
+import { memberPhotoUrl } from "@/lib/format";
 
 const CONGRESS_API = "https://api.congress.gov/v3";
 
@@ -212,10 +213,14 @@ interface ApiMember {
   state?: string;
   district?: number | null;
   terms?: { item?: ApiMemberTerm[] } | ApiMemberTerm[];
+  depiction?: { imageUrl?: string };
 }
 
 /** Upper bound on pages per member lookup, in case pagination misbehaves. */
 const MAX_MEMBER_PAGES = 5;
+
+/** Congress.gov's member list only changes when a seat turns over. */
+const CURRENT_MEMBERS_REVALIDATE_SECONDS = 24 * 60 * 60;
 
 /**
  * The chamber a member serves in now. Congress.gov lists terms oldest first,
@@ -231,6 +236,48 @@ function currentChamber(m: ApiMember): "Senate" | "House" {
   }
   // Without terms, fall back to the district, which only House members have.
   return m.district == null ? "Senate" : "House";
+}
+
+function toMemberResult(m: ApiMember, fallbackState = ""): MemberResult {
+  return {
+    id: m.bioguideId || "",
+    name: m.name || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
+    party: m.partyName || m.party || "",
+    state: m.state || fallbackState,
+    district: m.district ?? undefined,
+    chamber: currentChamber(m),
+    imageUrl: m.depiction?.imageUrl || undefined,
+  };
+}
+
+/**
+ * Collects every member from a Congress.gov member list, following
+ * `pagination.next`. `complete` is false when a page failed or the page limit
+ * cut the list short.
+ */
+async function fetchMemberPages(
+  url: string,
+  init?: RequestInit
+): Promise<{ members: ApiMember[]; complete: boolean }> {
+  const members: ApiMember[] = [];
+  for (let page = 0; page < MAX_MEMBER_PAGES; page++) {
+    // Append the key as raw text, like every other call in this file. fetch's
+    // URL parser drops a stray newline from the env var, while URLSearchParams
+    // would encode it into a key that Congress.gov rejects.
+    const resp: Response = await fetch(
+      `${url}&api_key=${process.env.CONGRESS_KEY}`,
+      init
+    );
+    if (!resp.ok) return { members, complete: false };
+    const data: { members?: ApiMember[]; pagination?: { next?: string } } =
+      await resp.json();
+    members.push(...(data.members || []));
+    if (!data.pagination?.next) return { members, complete: true };
+    const next = new URL(data.pagination.next);
+    next.searchParams.set("format", "json");
+    url = next.toString();
+  }
+  return { members, complete: false };
 }
 
 /**
@@ -252,36 +299,28 @@ export async function fetchMembers(
   // no limit) and follow `pagination.next` in case a page still comes back
   // short.
   const limit = district ? "" : "&limit=250";
-  let url = `${CONGRESS_API}/member/${path}?currentMember=true${limit}&format=json`;
-
-  const members: ApiMember[] = [];
-  for (let page = 0; page < MAX_MEMBER_PAGES; page++) {
-    // Append the key as raw text, like every other call in this file. fetch's
-    // URL parser drops a stray newline from the env var, while URLSearchParams
-    // would encode it into a key that Congress.gov rejects.
-    const resp: Response = await fetch(
-      `${url}&api_key=${process.env.CONGRESS_KEY}`
-    );
-    const data: { members?: ApiMember[]; pagination?: { next?: string } } =
-      await resp.json();
-    members.push(...(data.members || []));
-    if (!data.pagination?.next) break;
-    const next = new URL(data.pagination.next);
-    next.searchParams.set("format", "json");
-    url = next.toString();
-  }
-
-  return members.map(
-    (m): MemberResult => ({
-      id: m.bioguideId || "",
-      name:
-        m.name || `${m.firstName || ""} ${m.lastName || ""}`.trim(),
-      party: m.partyName || m.party || "",
-      state: m.state || state,
-      district: m.district ?? undefined,
-      chamber: currentChamber(m),
-    })
+  const { members } = await fetchMemberPages(
+    `${CONGRESS_API}/member/${path}?currentMember=true${limit}&format=json`
   );
+
+  return members.map((m) => toMemberResult(m, state));
+}
+
+/**
+ * Every current member of Congress, including the non-voting delegates.
+ * Cached for a day in Next's data cache, so the pages that list members rarely
+ * wait on Congress.gov. Throws when Congress.gov can't serve the whole list,
+ * so a partial list is never mistaken for all of Congress.
+ */
+export async function fetchCurrentMembers(): Promise<MemberResult[]> {
+  const { members, complete } = await fetchMemberPages(
+    `${CONGRESS_API}/member?currentMember=true&limit=250&format=json`,
+    { next: { revalidate: CURRENT_MEMBERS_REVALIDATE_SECONDS } }
+  );
+  if (!complete) {
+    throw new Error("Congress.gov did not return the full list of current members");
+  }
+  return members.filter((m) => m.bioguideId).map((m) => toMemberResult(m));
 }
 
 /**
@@ -869,7 +908,7 @@ export async function fetchMemberDetail(
     state,
     district,
     chamber,
-    imageUrl: `https://www.congress.gov/img/member/${bioguideId.toLowerCase()}_200.jpg`,
+    imageUrl: m.depiction?.imageUrl || memberPhotoUrl(bioguideId),
     website: m.officialWebsiteUrl || m.url,
     phone: m.addressInformation?.officePhone,
     leadership,

@@ -29,6 +29,8 @@ export interface MemberResult {
   district?: number;
   chamber: "Senate" | "House";
   url?: string;
+  /** Congress.gov's official photo, when it has one. */
+  imageUrl?: string;
 }
 
 export type VotePosition =

@@ -62,7 +62,7 @@ export default async function StateSenatePage({ params }: SenatePageProps) {
         member={sittingMember}
         office="U.S. Senate"
         seatLabel={`${stateName(state)} seat`}
-        emptyMessage={`A sitting senator couldn't be matched to these records. FEC filings alone don't establish which Senate seats are being contested in ${info.name}.`}
+        emptyMessage={`FEC filings alone don't establish which of ${info.name}'s Senate seats is on this ballot, so no sitting senator is shown.`}
       />
 
       <RaceCandidateList

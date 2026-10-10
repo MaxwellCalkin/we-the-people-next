@@ -37,9 +37,9 @@ interface MemberProfilePageProps {
 
 export async function generateMetadata({ params }: MemberProfilePageProps): Promise<Metadata> {
   const { bioguideId } = await params;
-  await connectDB();
-  const score = await MemberScore.findOne({ bioguideId }).select("name").lean().catch(() => null);
-  return { title: score?.name ? displayName(score.name) : "Member of Congress" };
+  // Next memoizes these Congress.gov fetches, so the page reuses them.
+  const detail = await fetchMemberDetail(bioguideId).catch(() => null);
+  return { title: detail?.name ? displayName(detail.name) : "Member of Congress" };
 }
 
 export default async function MemberProfilePage({ params }: MemberProfilePageProps) {
