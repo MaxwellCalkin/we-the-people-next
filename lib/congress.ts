@@ -336,10 +336,15 @@ export async function fetchRepresentatives(
     fetchMembers(state, district),
   ]);
 
+  // A district lookup also returns current members who held the seat before
+  // (House members moved by redistricting, senators who served in the House),
+  // so prefer the House member whose district is this one. At-large members
+  // may list no district, so fall back to the remaining House member.
+  const house = districtMembers.filter((m) => m.chamber === "House");
   return {
     senators: stateMembers.filter((m) => m.chamber === "Senate").slice(0, 2),
-    // A district lookup can also match a senator who once held the House seat.
-    houseRep: districtMembers.find((m) => m.chamber === "House") ?? null,
+    houseRep:
+      house.find((m) => m.district === Number(district)) ?? house[0] ?? null,
   };
 }
 
