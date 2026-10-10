@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 
 export default auth((req) => {
   const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
+  // Require a user: a misconfigured Auth.js (e.g. untrusted host, missing
+  // secret) answers with an error object, which must not count as signed in.
+  const isLoggedIn = !!req.auth?.user;
 
   const isOnboarding = nextUrl.pathname === "/onboarding";
   const isApiRoute = nextUrl.pathname.startsWith("/api");
@@ -27,5 +29,14 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/(dashboard)/:path*"],
+  // Route groups like (dashboard) aren't part of the URL, so match real paths:
+  // every page except API routes, Next.js internals, files with an extension
+  // (public/ assets, /icon.svg), and the pages a signed-in user without a
+  // district must still reach — /login, /signup, and /onboarding itself.
+  // Exclusions are whole segments, so a page like /signups still runs. The
+  // extension test is `\.\w+$`, not `\.[^/]*$`, because the latter backtracks
+  // quadratically on long dotted paths and this regex runs on every request.
+  matcher: [
+    "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+  ],
 };
