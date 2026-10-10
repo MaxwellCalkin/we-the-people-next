@@ -1,13 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchRepresentatives } from "../congress";
 
 // Congress.gov is an external API, not our DB, so a fake stands in for it.
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
-vi.stubEnv("CONGRESS_KEY", "test-key");
+
+const API_KEY = "test-key";
 
 beforeEach(() => {
   mockFetch.mockReset();
+  vi.stubEnv("CONGRESS_KEY", API_KEY);
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 // ── Fake Congress.gov ────────────────────────────────────
@@ -16,6 +22,9 @@ beforeEach(() => {
  * Serves /member/{state} and /member/{state}/{district} the way Congress.gov
  * pages list results: 20 per page unless `limit` asks for more, never more
  * than `maxPageSize`, with a `pagination.next` link while members remain.
+ * Like the real API, it rejects any request whose api_key isn't exactly
+ * right. It reads the URL the way fetch does, so a raw string gets the
+ * WHATWG URL parser's cleanup.
  */
 function serveMembers(
   membersByPath: Record<string, unknown[]>,
@@ -23,6 +32,14 @@ function serveMembers(
 ) {
   mockFetch.mockImplementation(async (input: string | URL) => {
     const url = new URL(input);
+    if (url.searchParams.get("api_key") !== API_KEY) {
+      return {
+        ok: false,
+        json: async () => ({
+          error: { code: "API_KEY_INVALID", message: "An invalid api_key was supplied." },
+        }),
+      };
+    }
     const members = membersByPath[url.pathname.replace("/v3/member/", "")] ?? [];
     const limit = Math.min(
       Number(url.searchParams.get("limit") ?? 20),
@@ -144,6 +161,27 @@ describe("fetchRepresentatives", () => {
       "Senator Two",
     ]);
     expect(houseRep?.name).toBe("Current Rep");
+  });
+
+  it("still finds representatives when the CONGRESS_KEY env var ends with a newline", async () => {
+    // e.g. saved with `echo "$KEY" | vercel env add CONGRESS_KEY`
+    vi.stubEnv("CONGRESS_KEY", `${API_KEY}\n`);
+    serveMembers({
+      VT: [
+        houseMember("H1", "At-Large Rep", 0),
+        senator("S1", "Senator One"),
+        senator("S2", "Senator Two"),
+      ],
+      "VT/0": [houseMember("H1", "At-Large Rep", 0)],
+    });
+
+    const { senators, houseRep } = await fetchRepresentatives("vt", "0");
+
+    expect(senators.map((s) => s.name)).toEqual([
+      "Senator One",
+      "Senator Two",
+    ]);
+    expect(houseRep?.name).toBe("At-Large Rep");
   });
 
   it("returns no representatives when Congress.gov responds with an error", async () => {
