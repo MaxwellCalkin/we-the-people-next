@@ -1,87 +1,219 @@
 @import "tailwindcss";
-@config "../tailwind.config.ts";
+
+/* Fonts come from next/font variables set on <html> in app/layout.tsx. */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-brand: var(--font-cormorant), "Cormorant Garamond", Georgia, serif;
+}
 
 @theme {
+  /* Brand palette */
+  --color-navy-950: #070f1d;
   --color-navy-900: #0a1628;
   --color-navy-800: #111d33;
   --color-navy-700: #1a2942;
   --color-navy-600: #243656;
   --color-cream: #f5f1eb;
   --color-gold: #c9a84c;
-  --color-red-accent: #b91c1c;
-  --color-glass-bg: rgba(255, 255, 255, 0.08);
-  --color-glass-border: rgba(255, 255, 255, 0.15);
-  --font-brand: "Cormorant Unicase", serif;
-  --font-splash: "Splash", cursive;
+  --color-gold-bright: #e0c372;
+  --color-gold-deep: #a8862f;
+  --color-gold-ink: #0b1728;
+
+  /* Surfaces, from the page canvas up to popovers */
+  --color-canvas: #0a1628;
+  --color-surface: #0f1c31;
+  --color-surface-2: #142540;
+  --color-surface-3: #1a2e4d;
+  --color-field: #0b182b;
+
+  /* Borders: line for dividers, line-strong for emphasis, line-input for controls (3:1) */
+  --color-line: #22344f;
+  --color-line-strong: #33496b;
+  --color-line-input: #566d92;
+
+  /* Text, all AA on every surface: ink (primary), ink-2 (secondary), ink-3 (muted) */
+  --color-ink: #f5f1eb;
+  --color-ink-2: #c1cad8;
+  --color-ink-3: #8e9cb2;
+
+  /* Status */
+  --color-yea: #4ade80;
+  --color-nay: #f87171;
+  --color-info: #7cb4ff;
+  --color-party-d: #6ba3ff;
+  --color-party-r: #ff7b7b;
+  --color-party-i: #b8a6ff;
+
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -18px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 24px 48px -16px rgb(2 8 20 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.04);
+
+  --animate-fade-up: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }
 
 @layer base {
+  :root {
+    color-scheme: dark;
+    --header-height: 4rem;
+  }
+
+  html {
+    scroll-padding-top: calc(var(--header-height) + 1rem);
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    background-color: var(--color-navy-900);
-    color: var(--color-cream);
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(201 168 76 / 0.35);
+    color: var(--color-ink);
+  }
+
+  :where(a, button, summary, [role="tab"], [tabindex]):focus-visible {
+    outline: 2px solid var(--color-gold-bright);
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  :where(input, select, textarea):focus-visible {
+    outline: none;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+
+  /* Thin, theme-matched scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
   }
 }
 
 @layer components {
-  .glass {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
     border-radius: 1rem;
+    box-shadow: var(--shadow-card);
   }
-  .glass-dark {
-    background: rgba(10, 22, 40, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 1rem;
+
+  .card-interactive {
+    position: relative;
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
   }
-  .glass-dark-flat {
-    background: rgba(10, 22, 40, 0.85);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  .card-interactive:hover {
+    border-color: var(--color-line-strong);
+    background-color: var(--color-surface-2);
   }
-  .glass-hover {
-    transition: all 0.3s ease;
+
+  /* Whole-card link: put .stretched-link on the primary link inside a relative card */
+  .stretched-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    z-index: 0;
   }
-  .glass-hover:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(201, 168, 76, 0.3);
-    box-shadow: 0 8px 32px rgba(201, 168, 76, 0.15);
+  .stretched-link:focus-visible {
+    outline: none;
   }
-  .glass-card {
-    background: rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 1rem;
-    padding: 1.5rem;
+  .stretched-link:focus-visible::after {
+    outline: 2px solid var(--color-gold-bright);
+    outline-offset: 2px;
   }
-  .text-gradient {
-    background: linear-gradient(135deg, #f5f1eb 0%, #c9a84c 100%);
+
+  .field {
+    width: 100%;
+    background-color: var(--color-field);
+    border: 1px solid var(--color-line-input);
+    border-radius: 0.625rem;
+    color: var(--color-ink);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .field::placeholder {
+    color: var(--color-ink-3);
+  }
+  .field:hover:not(:disabled) {
+    border-color: #6d84a9;
+  }
+  .field:focus {
+    border-color: var(--color-gold);
+    box-shadow: 0 0 0 3px rgb(201 168 76 / 0.25);
+  }
+  .field:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .field[aria-invalid="true"] {
+    border-color: var(--color-nay);
+  }
+  select.field {
+    appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23c1cad8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-gold-bright);
+  }
+
+  /* Display headline accent used sparingly on marketing surfaces */
+  .text-gold-gradient {
+    background: linear-gradient(120deg, #f5f1eb 10%, #e0c372 60%, #c9a84c 100%);
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
     background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
-  .gold-glow {
-    box-shadow: 0 0 20px rgba(201, 168, 76, 0.3), 0 0 60px rgba(201, 168, 76, 0.1);
+
+  .bg-hero-glow {
+    background:
+      radial-gradient(60rem 30rem at 85% -10%, rgb(201 168 76 / 0.13), transparent 60%),
+      radial-gradient(50rem 30rem at -10% 10%, rgb(56 98 170 / 0.18), transparent 60%);
   }
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
+
+  .bg-grid {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse at top, black 30%, transparent 75%);
   }
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-20px); }
-  }
-  .animate-glow {
-    animation: glow 2s ease-in-out infinite alternate;
-  }
-  @keyframes glow {
-    from { box-shadow: 0 0 5px rgba(201, 168, 76, 0.2); }
-    to { box-shadow: 0 0 20px rgba(201, 168, 76, 0.4), 0 0 40px rgba(201, 168, 76, 0.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

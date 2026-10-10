@@ -1,202 +1,319 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Menu, X, LogOut, User } from "lucide-react";
+import {
+  BookOpen,
+  ChevronDown,
+  FileText,
+  Landmark,
+  LogOut,
+  Megaphone,
+  Menu,
+  Plus,
+  User,
+  Vote,
+  X,
+} from "lucide-react";
 import SearchBar from "@/components/ui/SearchBar";
 import Avatar from "@/components/ui/Avatar";
+import Logo from "@/components/ui/Logo";
+import { ButtonLink, buttonClasses } from "@/components/ui/Button";
 
 interface NavbarProps {
+  /** Empty or missing when nobody is signed in. */
   userName?: string;
   userImage?: string | null;
+  /** e.g. "PA-12"; shown in the account menu. */
+  district?: string;
 }
 
-export default function Navbar({ userName, userImage }: NavbarProps) {
-  const [scrolled, setScrolled] = useState(false);
+export const NAV_LINKS = [
+  { href: "/bills", label: "Bills", icon: FileText },
+  { href: "/members", label: "Members", icon: Landmark },
+  { href: "/elections", label: "Elections", icon: Vote },
+  { href: "/proposals", label: "Proposals", icon: Megaphone },
+  { href: "/how-it-works", label: "How It Works", icon: BookOpen },
+];
+
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function isActive(pathname: string, href: string) {
+  if (href === "/proposals") return pathname === "/proposals" || pathname.startsWith("/proposal");
+  if (href === "/bills") return pathname.startsWith("/bills") || pathname.startsWith("/vote");
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export default function Navbar({ userName, userImage, district }: NavbarProps) {
+  const pathname = usePathname() ?? "";
+  const signedIn = Boolean(userName);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  // Close menus whenever the route changes.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
+    setMobileOpen(false);
+    setMenuOpen(false);
+  }
 
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 20);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (
-        avatarMenuRef.current &&
-        !avatarMenuRef.current.contains(e.target as Node)
-      ) {
-        setAvatarMenuOpen(false);
+    if (!menuOpen) return;
+    function onPointer(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMenuOpen(false);
+        menuButtonRef.current?.focus();
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
-  const navLinks = [
-    { href: "/bills", label: "Bills" },
-    { href: "/members", label: "Members" },
-    { href: "/elections", label: "Elections" },
-    { href: "/how-it-works", label: "How It Works" },
-    { href: "/proposals", label: "Proposals" },
-  ];
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    const hamburger = hamburgerRef.current;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setMobileOpen(false);
+        return;
+      }
+      // The drawer is aria-modal: keep Tab and Shift+Tab cycling inside it.
+      const drawer = drawerRef.current;
+      if (e.key !== "Tab" || !drawer) return;
+      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      const inside = active instanceof Node && drawer.contains(active);
+      if (e.shiftKey && (active === first || !inside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+      hamburger?.focus();
+    };
+  }, [mobileOpen]);
+
+  const logOut = () => signOut({ callbackUrl: "/" });
 
   return (
     <>
-      <nav
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled ? "glass-dark-flat shadow-lg" : "bg-transparent"
-        }`}
-      >
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
-            {/* Logo */}
-            <Link
-              href="/profile"
-              className="font-brand text-xl font-bold text-cream tracking-wider"
-            >
-              Heard
-            </Link>
+      <header className="sticky top-0 z-50 border-b border-line bg-canvas/85 backdrop-blur-xl supports-[backdrop-filter]:bg-canvas/70">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
+          <Logo href={signedIn ? "/profile" : "/"} className="shrink-0" />
 
-            {/* Desktop Nav */}
-            <div className="hidden md:flex items-center gap-6">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="text-sm text-cream/80 hover:text-gold transition-colors"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-
-            {/* Search + Avatar Menu (Desktop) */}
-            <div className="hidden md:flex items-center gap-4">
-              <Link
-                href="/proposals/new"
-                className="rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-sm font-medium text-gold hover:bg-gold/20 transition-colors"
-              >
-                Propose a Bill
-              </Link>
-
-              <SearchBar className="w-52" />
-
-              {/* Avatar dropdown */}
-              <div className="relative" ref={avatarMenuRef}>
-                <button
-                  onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
-                  className="rounded-full ring-2 ring-transparent hover:ring-gold/50 transition-all"
-                  aria-label="User menu"
-                >
-                  <Avatar
-                    src={userImage}
-                    name={userName || "U"}
-                    size={32}
-                  />
-                </button>
-
-                {avatarMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-lg bg-navy-800 border border-white/10 shadow-xl py-1 z-50">
+          <nav aria-label="Main" className="ml-4 hidden lg:block">
+            <ul className="flex items-center gap-1">
+              {NAV_LINKS.map((link) => {
+                const active = isActive(pathname, link.href);
+                return (
+                  <li key={link.href}>
                     <Link
-                      href="/profile"
-                      onClick={() => setAvatarMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-cream/80 hover:text-gold hover:bg-white/5 transition-colors"
+                      href={link.href}
+                      aria-current={active ? "page" : undefined}
+                      className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        active ? "bg-white/[0.07] text-ink" : "text-ink-2 hover:bg-white/[0.04] hover:text-ink"
+                      }`}
                     >
-                      <User className="h-4 w-4" />
-                      Profile
+                      {link.label}
                     </Link>
-                    <div className="border-t border-white/10 my-1" />
-                    <button
-                      onClick={() => signOut({ callbackUrl: "/" })}
-                      className="flex items-center gap-2 w-full px-4 py-2 text-sm text-cream/70 hover:text-red-accent hover:bg-white/5 transition-colors"
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <div className="ml-auto hidden items-center gap-3 lg:flex">
+            <SearchBar className="w-44 xl:w-60" size="sm" shortcut />
+
+            {signedIn ? (
+              <>
+                <ButtonLink href="/proposals/new" variant="outline" size="sm" icon={<Plus className="h-4 w-4" aria-hidden="true" />}>
+                  Propose a Bill
+                </ButtonLink>
+                <div className="relative" ref={menuRef}>
+                  <button
+                    ref={menuButtonRef}
+                    type="button"
+                    onClick={() => setMenuOpen((open) => !open)}
+                    aria-label="User menu"
+                    aria-expanded={menuOpen}
+                    aria-controls="account-menu"
+                    className="flex items-center gap-1 rounded-full p-0.5 pr-1.5 text-ink-3 transition-colors hover:bg-white/[0.06] hover:text-ink"
+                  >
+                    <Avatar src={userImage} name={userName || "You"} size={32} />
+                    <ChevronDown className={`h-4 w-4 transition-transform ${menuOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+                  </button>
+
+                  {menuOpen && (
+                    <div
+                      id="account-menu"
+                      className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-line-strong bg-surface-2 shadow-pop animate-fade-in"
                     >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Mobile Hamburger */}
-            <button
-              onClick={() => setMobileOpen(!mobileOpen)}
-              className="md:hidden text-cream p-2"
-              aria-label="Toggle menu"
-            >
-              {mobileOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-            </button>
+                      <div className="border-b border-line px-4 py-3">
+                        <p className="truncate text-sm font-semibold text-ink">{userName}</p>
+                        {district && <p className="text-xs text-ink-3">Voting district {district}</p>}
+                      </div>
+                      <div className="p-1.5">
+                        <Link
+                          href="/profile"
+                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink"
+                        >
+                          <User className="h-4 w-4" aria-hidden="true" />
+                          Profile
+                        </Link>
+                        <Link
+                          href="/proposals/new"
+                          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                          Propose a bill
+                        </Link>
+                      </div>
+                      <div className="border-t border-line p-1.5">
+                        <button
+                          type="button"
+                          onClick={logOut}
+                          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-nay/10 hover:text-nay"
+                        >
+                          <LogOut className="h-4 w-4" aria-hidden="true" />
+                          Log out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <ButtonLink href="/login" variant="ghost" size="sm">
+                  Log in
+                </ButtonLink>
+                <ButtonLink href="/signup" size="sm">
+                  Sign up
+                </ButtonLink>
+              </>
+            )}
           </div>
-        </div>
-      </nav>
 
-      {/* Mobile Sidebar */}
+          <button
+            ref={hamburgerRef}
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-menu"
+            className="ml-auto -mr-2 inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink transition-colors hover:bg-white/[0.06] lg:hidden"
+          >
+            <Menu className="h-6 w-6" aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setMobileOpen(false)}
-          />
-          {/* Sidebar */}
-          <div className="absolute right-0 top-0 h-full w-72 glass-dark p-6 flex flex-col gap-6">
-            <div className="flex justify-end">
+        <div ref={drawerRef} className="fixed inset-0 z-[60] lg:hidden" id="mobile-menu" role="dialog" aria-modal="true" aria-label="Menu">
+          <div className="absolute inset-0 bg-navy-950/70 backdrop-blur-sm animate-fade-in" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-y-0 right-0 flex w-[min(22rem,88vw)] flex-col border-l border-line bg-surface shadow-pop animate-fade-in">
+            <div className="flex h-16 items-center justify-between border-b border-line px-4">
+              <span className="text-sm font-semibold text-ink-2">Menu</span>
               <button
+                ref={closeButtonRef}
+                type="button"
                 onClick={() => setMobileOpen(false)}
-                className="text-cream p-2"
                 aria-label="Close menu"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-ink transition-colors hover:bg-white/[0.06]"
               >
-                <X className="h-6 w-6" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
 
-            <SearchBar className="w-full" />
-
-            <div className="flex flex-col gap-4">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="text-cream/80 hover:text-gold transition-colors text-lg"
-                >
-                  {link.label}
-                </Link>
-              ))}
-              <Link
-                href="/profile"
-                onClick={() => setMobileOpen(false)}
-                className="text-cream/80 hover:text-gold transition-colors text-lg"
-              >
-                Profile
-              </Link>
-              <Link
-                href="/proposals/new"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg border border-gold/40 bg-gold/10 px-4 py-2 text-center text-base font-medium text-gold hover:bg-gold/20 transition-colors"
-              >
-                Propose a Bill
-              </Link>
+            <div className="flex-1 overflow-y-auto px-4 py-5">
+              <SearchBar className="mb-5" />
+              <nav aria-label="Mobile">
+                <ul className="space-y-1">
+                  {NAV_LINKS.map((link) => {
+                    const active = isActive(pathname, link.href);
+                    const Icon = link.icon;
+                    return (
+                      <li key={link.href}>
+                        <Link
+                          href={link.href}
+                          onClick={() => setMobileOpen(false)}
+                          aria-current={active ? "page" : undefined}
+                          className={`flex items-center gap-3 rounded-xl px-3 py-3 text-base font-medium transition-colors ${
+                            active ? "bg-white/[0.07] text-ink" : "text-ink-2 hover:bg-white/[0.04] hover:text-ink"
+                          }`}
+                        >
+                          <Icon className={`h-5 w-5 ${active ? "text-gold-bright" : "text-ink-3"}`} aria-hidden="true" />
+                          {link.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </nav>
             </div>
 
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="mt-auto flex items-center gap-2 text-cream/70 hover:text-red-accent transition-colors"
-            >
-              <LogOut className="h-5 w-5" />
-              <span>Logout</span>
-            </button>
+            <div className="border-t border-line p-4">
+              {signedIn ? (
+                <div className="space-y-3">
+                  <Link
+                    href="/profile"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-3 rounded-xl p-2 transition-colors hover:bg-white/[0.04]"
+                  >
+                    <Avatar src={userImage} name={userName || "You"} size={40} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-ink">{userName}</span>
+                      <span className="block text-xs text-ink-3">View profile{district ? ` · ${district}` : ""}</span>
+                    </span>
+                  </Link>
+                  <ButtonLink href="/proposals/new" fullWidth onClick={() => setMobileOpen(false)} icon={<Plus className="h-4 w-4" aria-hidden="true" />}>
+                    Propose a Bill
+                  </ButtonLink>
+                  <button type="button" onClick={logOut} className={buttonClasses({ variant: "ghost", fullWidth: true })}>
+                    <LogOut className="h-4 w-4" aria-hidden="true" />
+                    Log out
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <ButtonLink href="/login" variant="secondary" onClick={() => setMobileOpen(false)}>
+                    Log in
+                  </ButtonLink>
+                  <ButtonLink href="/signup" onClick={() => setMobileOpen(false)}>
+                    Sign up
+                  </ButtonLink>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -38,8 +38,8 @@ describe("CampaignFinance", () => {
       />
     );
 
-    expect(screen.getByText("Campaign Finance")).toBeInTheDocument();
-    expect(screen.getByText("Cycle 2025–2026")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Campaign finance" })).toBeInTheDocument();
+    expect(screen.getByText("2025–2026 cycle")).toBeInTheDocument();
 
     // Currency formatting (no cents)
     expect(screen.getByText("$5,000,000")).toBeInTheDocument(); // receipts
@@ -83,7 +83,7 @@ describe("CampaignFinance", () => {
       />
     );
 
-    expect(screen.getByText("Campaign Finance")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Campaign finance" })).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /OpenSecrets/i })
     ).toBeInTheDocument();

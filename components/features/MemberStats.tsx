@@ -1,5 +1,5 @@
 // components/features/MemberStats.tsx
-import GlassCard from "@/components/ui/GlassCard";
+import Card from "@/components/ui/Card";
 import AlignmentBadge from "@/components/ui/AlignmentBadge";
 
 interface MemberStatsProps {
@@ -20,28 +20,18 @@ export default function MemberStats({
   tenureDetail,
 }: MemberStatsProps) {
   return (
-    <div className="grid grid-cols-3 gap-4">
-      <GlassCard className="text-center">
-        <AlignmentBadge
-          score={communityScore}
-          label="Community Alignment"
-          detail={communityDetail}
-          size="lg"
-        />
-      </GlassCard>
-      <GlassCard className="text-center">
-        <AlignmentBadge
-          score={personalScore}
-          label="Your Alignment"
-          detail={personalDetail}
-          size="lg"
-        />
-      </GlassCard>
-      <GlassCard className="text-center">
-        <p className="text-xs uppercase tracking-wider text-cream/40">Tenure</p>
-        <p className="text-2xl font-bold text-cream mt-0.5">{tenure}</p>
-        <p className="text-[0.7rem] text-cream/30 mt-0.5">{tenureDetail}</p>
-      </GlassCard>
+    <div className="grid gap-4 sm:grid-cols-3">
+      <Card>
+        <AlignmentBadge score={communityScore} label="Community alignment" detail={communityDetail} size="lg" align="start" />
+      </Card>
+      <Card>
+        <AlignmentBadge score={personalScore} label="Your alignment" detail={personalDetail} size="lg" align="start" />
+      </Card>
+      <Card>
+        <p className="text-xs font-medium text-ink-3">Time in office</p>
+        <p className="mt-1 text-3xl font-semibold text-ink tabular-nums">{tenure}</p>
+        <p className="mt-2 text-xs text-ink-3">{tenureDetail}</p>
+      </Card>
     </div>
   );
 }

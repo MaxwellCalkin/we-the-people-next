@@ -1,78 +1,115 @@
 export const dynamic = "force-dynamic";
 
-import { redirect } from "next/navigation";
-import Link from "next/link";
-import {
-  fetchBillDetails,
-  getAllVotesOnBill,
-  parseBillSlug,
-} from "@/lib/congress";
-import { auth } from "@/lib/auth";
-import GlassCard from "@/components/ui/GlassCard";
+import type { Metadata } from "next";
+import { FileQuestion, Gavel } from "lucide-react";
+import { fetchBillDetails, getAllVotesOnBill, parseBillSlug } from "@/lib/congress";
+import { formatBillNumber } from "@/lib/format";
+import { getUserVotes } from "@/lib/viewer";
+import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
+import { ButtonLink } from "@/components/ui/Button";
+import BillHeader from "@/components/features/BillHeader";
 import RollCallTable from "@/components/features/RollCallTable";
-import { ArrowLeft } from "lucide-react";
 
 interface VotesPageProps {
   params: Promise<{ slug: string; congress: string }>;
 }
 
+export async function generateMetadata({ params }: VotesPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  return { title: `Roll call votes on ${formatBillNumber(slug)}` };
+}
+
+function specialStatusCopy(status: string): { title: string; description: string } {
+  switch (status) {
+    case "Passed by Unanimous Consent":
+      return {
+        title: "Passed by unanimous consent",
+        description: "No member objected, so no individual votes were recorded.",
+      };
+    case "Passed by Voice Vote":
+      return {
+        title: "Passed by voice vote",
+        description: "Members voted aloud as a group, so individual votes weren't recorded.",
+      };
+    case "Error fetching votes":
+      return {
+        title: "We couldn't load the roll call",
+        description: "The House and Senate vote records didn't respond. Please try again in a few minutes.",
+      };
+    default:
+      return {
+        title: "No roll call votes yet",
+        description: "Neither chamber has held a recorded vote on this bill. Check back as it moves through Congress.",
+      };
+  }
+}
+
 export default async function AllVotesPage({ params }: VotesPageProps) {
-  const session = await auth();
-  if (!session) redirect("/login");
-
   const { slug, congress } = await params;
-  const bill = await fetchBillDetails(congress, slug);
-  if (!bill) redirect("/bills");
+  const [bill, userVotes] = await Promise.all([fetchBillDetails(congress, slug).catch(() => null), getUserVotes()]);
+  const parsed = bill ? parseBillSlug(bill.bill_slug) : null;
 
-  const parsed = parseBillSlug(bill.bill_slug);
-  if (!parsed) redirect("/bills");
+  if (!bill || !parsed) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <EmptyState
+          icon={FileQuestion}
+          title="We couldn't load this bill"
+          description="Congress.gov may be temporarily unavailable. Please try again in a few minutes."
+          action={<ButtonLink href="/bills">Browse bills</ButtonLink>}
+        />
+      </div>
+    );
+  }
 
   const voteData = await getAllVotesOnBill(congress, parsed.type, parsed.number);
+  const billLabel = formatBillNumber(bill.bill_slug);
+  const billLink = `/vote/${slug}/${congress}${userVotes[slug] ? "/voted" : ""}`;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <Link
-        href={`/vote/${slug}/${congress}/voted`}
-        className="inline-flex items-center gap-1.5 text-gold text-sm hover:text-gold/80 transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back to bill
-      </Link>
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <BillHeader
+        bill={bill}
+        showMeta={false}
+        breadcrumbs={[
+          { label: "Bills", href: "/bills" },
+          { label: billLabel, href: billLink },
+          { label: "Roll call votes" },
+        ]}
+      />
 
-      <GlassCard>
-        <h1 className="font-brand text-2xl sm:text-3xl text-gradient mb-2">
-          {bill.short_title || bill.title}
-        </h1>
-        <p className="text-cream/60 text-sm">
-          Congressional Roll Call Votes
-        </p>
-      </GlassCard>
-
-      {voteData.type === "special" ? (
-        <GlassCard className="text-center py-8">
-          <p className="text-cream/70 text-lg">{voteData.status}</p>
-          <p className="text-cream/40 text-sm mt-2">
-            No individual member vote records are available for this bill.
-          </p>
-        </GlassCard>
-      ) : (
-        <>
-          {voteData.chamberStatuses?.map((cs, i) => (
-            <GlassCard key={`status-${i}`} className="text-center py-6">
-              <h2 className="font-brand text-xl text-cream mb-1">
-                {cs.chamber}
-              </h2>
-              <p className="text-cream/60 text-sm">{cs.status}</p>
-              <p className="text-cream/40 text-xs mt-1">
-                No individual member vote records available.
-              </p>
-            </GlassCard>
-          ))}
-          {voteData.results.map((rollCall, i) => (
-            <RollCallTable key={i} rollCall={rollCall} />
-          ))}
-        </>
-      )}
+      <div className="space-y-6">
+        {voteData.type === "special" ? (
+          <EmptyState icon={Gavel} {...specialStatusCopy(voteData.status)} />
+        ) : (
+          <>
+            {voteData.chamberStatuses?.map((cs, i) => (
+              <Card key={`status-${i}`} className="flex items-start gap-4">
+                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-ink-2">
+                  <Gavel className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="font-semibold text-ink">{cs.chamber}</h2>
+                  <p className="text-sm text-ink-2">{cs.status}</p>
+                  <p className="mt-1 text-xs text-ink-3">No individual member votes were recorded in this chamber.</p>
+                </div>
+              </Card>
+            ))}
+            {voteData.results.map((rollCall, i) => (
+              <RollCallTable key={i} rollCall={rollCall} />
+            ))}
+            {voteData.results.length === 0 && (voteData.chamberStatuses?.length ?? 0) === 0 && (
+              <EmptyState
+                icon={Gavel}
+                title="No roll call votes yet"
+                description="Neither chamber has held a recorded vote on this bill. Check back as it moves through Congress."
+                action={<ButtonLink href={billLink} variant="secondary">Back to {billLabel}</ButtonLink>}
+              />
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

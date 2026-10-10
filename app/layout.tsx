@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Unicase, Inter } from "next/font/google";
 import Providers from "@/components/Providers";
 import "./globals.css";
 
 const cormorantUnicase = Cormorant_Unicase({
-  variable: "--font-brand",
+  variable: "--font-cormorant",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const inter = Inter({
@@ -15,9 +15,17 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Heard",
+  title: {
+    default: "Heard — See if you're being represented",
+    template: "%s · Heard",
+  },
   description:
-    "A civic engagement platform connecting citizens with their representatives and legislation.",
+    "Vote on the bills before Congress, compare your votes with your representatives, and prepare for your next election.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0a1628",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({

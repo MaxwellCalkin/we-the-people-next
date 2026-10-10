@@ -3,189 +3,144 @@
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import GlassCard from "@/components/ui/GlassCard";
-import MagneticButton from "@/components/ui/MagneticButton";
+import { MapPin } from "lucide-react";
+import Alert from "@/components/ui/Alert";
+import Button from "@/components/ui/Button";
+import Field, { describedBy } from "@/components/ui/Field";
+import DistrictChoice, { type DistrictOption } from "@/components/auth/DistrictChoice";
 import { HOME_PATH } from "@/lib/routes";
-
-interface District {
-  number: number;
-  proportion: number;
-}
 
 export default function OnboardingPage() {
   const { update } = useSession();
   const router = useRouter();
   const [zip, setZip] = useState("");
   const [loading, setLoading] = useState(false);
-  const [districts, setDistricts] = useState<District[] | null>(null);
+  const [error, setError] = useState("");
+  const [districts, setDistricts] = useState<DistrictOption[] | null>(null);
   const [splitState, setSplitState] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState<number | null>(null);
 
-  const saveDistrictAndRedirect = async (state: string, cd: string) => {
+  const saveDistrict = async (state: string, cd: string) => {
     const res = await fetch("/api/user/district", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ state, cd }),
     });
-
     if (!res.ok) {
-      toast.error("Failed to save your district. Please try again.");
+      setError("We couldn't save your district. Please try again.");
+      setLoading(false);
       return;
     }
-
-    // Refresh the session so needsOnboarding updates
+    // Refresh the session so needsOnboarding updates, then open the signed-in home.
     await update();
     router.push(HOME_PATH);
+    router.refresh();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
+    if (districts) {
+      if (selectedDistrict === null) return;
+      setLoading(true);
+      try {
+        await saveDistrict(splitState, String(selectedDistrict));
+      } catch {
+        setError("Something went wrong. Please try again.");
+        setLoading(false);
+      }
+      return;
+    }
 
     if (!/^\d{5}$/.test(zip)) {
-      toast.error("Please enter a valid 5-digit ZIP code.");
+      setError("Enter a 5-digit ZIP code.");
       return;
     }
 
     setLoading(true);
-
     try {
       const res = await fetch("/api/district", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ zip }),
       });
-
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || "Could not look up your district.");
+        setError(data.error || "We couldn't find a district for that ZIP code.");
         setLoading(false);
         return;
       }
-
-      // Response always has { state, districts[] }
-      if (data.districts && data.districts.length === 1) {
-        // Single district — save immediately
-        await saveDistrictAndRedirect(data.state, String(data.districts[0].number));
+      if (data.districts?.length === 1) {
+        await saveDistrict(data.state, String(data.districts[0].number));
         return;
       }
-
-      if (data.districts && data.districts.length > 1) {
-        // Split ZIP — show district picker
+      if (data.districts?.length > 1) {
         setDistricts(data.districts);
         setSplitState(data.state);
         setSelectedDistrict(data.districts[0]?.number ?? null);
         setLoading(false);
         return;
       }
-
-      toast.error("Unexpected response. Please try again.");
+      setError("We couldn't find a district for that ZIP code.");
+      setLoading(false);
     } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
+      setError("Something went wrong. Please try again.");
       setLoading(false);
     }
   };
-
-  const handleDistrictSelect = async () => {
-    if (selectedDistrict === null) return;
-    setLoading(true);
-    try {
-      await saveDistrictAndRedirect(splitState, String(selectedDistrict));
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const inputClasses =
-    "w-full bg-white/5 border border-glass-border rounded-lg px-4 py-3 text-cream placeholder:text-cream/50 focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold/50 transition-all";
 
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <GlassCard className="p-8 max-w-md w-full">
-        <h1 className="text-3xl font-brand font-bold text-cream text-center mb-4">
-          Welcome to Heard
-        </h1>
-
-        <p className="text-cream/70 text-center mb-8">
-          To show you how your representatives vote, we need to know your
-          congressional district. Enter your ZIP code below &mdash; we never
-          store it.
+    <div className="mx-auto flex max-w-lg flex-col px-4 py-6 sm:py-12">
+      <div className="card p-6 sm:p-8 animate-fade-up">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gold/10 text-gold-bright ring-1 ring-gold/25">
+          <MapPin className="h-6 w-6" aria-hidden="true" />
+        </span>
+        <h1 className="mt-5 font-brand text-3xl font-semibold text-ink sm:text-4xl">Find your representatives</h1>
+        <p className="mt-3 leading-relaxed text-ink-2">
+          Your ZIP code tells us which senators and House member represent you, so we can compare their votes with
+          yours. We use it once and don&apos;t store it.
         </p>
 
-        {!districts ? (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div>
-              <label
-                htmlFor="zip"
-                className="block text-sm text-cream/70 mb-1.5"
-              >
-                ZIP Code
-              </label>
-              <input
-                id="zip"
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]{5}"
-                maxLength={5}
-                value={zip}
-                onChange={(e) => setZip(e.target.value)}
-                placeholder="12345"
-                required
-                className={inputClasses}
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+          {error && <Alert tone="error">{error}</Alert>}
 
-            <div className="pt-2 flex justify-center">
-              <MagneticButton type="submit" disabled={loading}>
-                {loading ? "Looking up..." : "Find My District"}
-              </MagneticButton>
-            </div>
-          </form>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-cream/70">
-              Your ZIP code spans multiple congressional districts. Please
-              select yours:
-            </p>
-            <div className="flex flex-col gap-2">
-              {districts.map((d) => (
-                <label
-                  key={d.number}
-                  className="flex items-center gap-3 p-3 rounded-lg border border-glass-border bg-white/5 cursor-pointer hover:bg-white/10 transition-colors"
-                >
-                  <input
-                    type="radio"
-                    name="district"
-                    value={d.number}
-                    checked={selectedDistrict === d.number}
-                    onChange={() => setSelectedDistrict(d.number)}
-                    className="accent-gold"
-                  />
-                  <span className="text-cream">
-                    {splitState.toUpperCase()} District {d.number}
-                  </span>
-                  <span className="text-cream/40 text-xs ml-auto">
-                    {Math.round(d.proportion * 100)}% of ZIP
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="pt-2 flex justify-center">
-              <MagneticButton
-                type="button"
-                onClick={handleDistrictSelect}
-                disabled={loading}
-              >
-                {loading ? "Saving..." : "Continue"}
-              </MagneticButton>
-            </div>
-          </div>
-        )}
-      </GlassCard>
+          <Field id="zip" label="ZIP code" hint="The ZIP code where you're registered to vote.">
+            <input
+              id="zip"
+              type="text"
+              inputMode="numeric"
+              autoComplete="postal-code"
+              pattern="[0-9]{5}"
+              maxLength={5}
+              value={zip}
+              onChange={(e) => {
+                setZip(e.target.value.replace(/\D/g, "").slice(0, 5));
+                setDistricts(null);
+              }}
+              placeholder="12345"
+              required
+              autoFocus
+              aria-describedby={describedBy("zip", { hint: true })}
+              className="field h-12 max-w-[10rem] text-lg tracking-[0.2em]"
+            />
+          </Field>
+
+          {districts && (
+            <DistrictChoice
+              state={splitState}
+              districts={districts}
+              value={selectedDistrict}
+              onChange={setSelectedDistrict}
+            />
+          )}
+
+          <Button type="submit" size="lg" fullWidth loading={loading} loadingText={districts ? "Saving…" : "Looking up your district…"}>
+            {districts ? "Save my district" : "Find my district"}
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

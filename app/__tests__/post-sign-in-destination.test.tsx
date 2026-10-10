@@ -20,7 +20,7 @@ const mockRedirect = vi.fn((url: string) => {
   throw new Error(`NEXT_REDIRECT ${url}`);
 });
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, refresh: vi.fn() }),
   redirect: (url: string) => mockRedirect(url),
 }));
 
@@ -34,15 +34,16 @@ vi.mock("next-auth/react", () => ({
   useSession: () => ({ update: mockUpdateSession }),
 }));
 
-vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
-vi.mock("gsap", () => ({ default: { to: vi.fn() } }));
-
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 function jsonResponse(body: unknown) {
   return { ok: true, json: async () => body };
 }
+
+// The auth pages are server components that read ?callbackUrl=; render them
+// the way Next does for a visit with no callback.
+const noParams = { searchParams: Promise.resolve({}) };
 
 afterEach(() => {
   cleanup();
@@ -56,10 +57,11 @@ afterEach(() => {
 
 describe("after signing in", () => {
   it("sends Google sign-ins from the login page to Elections", async () => {
+    mockSignIn.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<LoginPage />);
+    render(await LoginPage(noParams));
 
-    await user.click(screen.getByRole("button", { name: "Sign in with Google" }));
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
 
     expect(mockSignIn).toHaveBeenCalledWith("google", {
       callbackUrl: "/elections",
@@ -68,19 +70,20 @@ describe("after signing in", () => {
 
   it("sends email logins to Elections", async () => {
     mockSignIn.mockResolvedValue({ error: undefined });
-    const user = userEvent.setup();
-    render(<LoginPage />);
+    const user = userEvent.setup({ delay: null });
+    render(await LoginPage(noParams));
 
     await user.type(screen.getByLabelText("Email"), "voter@example.com");
     await user.type(screen.getByLabelText("Password"), "Password1234");
-    await user.click(screen.getByRole("button", { name: "Log In" }));
+    await user.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(mockPush).toHaveBeenCalledWith("/elections");
   });
 
   it("sends Google sign-ups to Elections", async () => {
+    mockSignIn.mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<SignupPage />);
+    render(await SignupPage(noParams));
 
     await user.click(screen.getByRole("button", { name: "Sign up with Google" }));
 
@@ -92,15 +95,15 @@ describe("after signing in", () => {
   it("sends new email sign-ups to Elections", async () => {
     mockFetch.mockResolvedValue(jsonResponse({ success: true }));
     mockSignIn.mockResolvedValue({ error: undefined });
-    const user = userEvent.setup();
-    render(<SignupPage />);
+    const user = userEvent.setup({ delay: null });
+    render(await SignupPage(noParams));
 
     await user.type(screen.getByLabelText("Username"), "new_voter");
     await user.type(screen.getByLabelText("Email"), "voter@example.com");
-    await user.type(screen.getByLabelText("ZIP Code"), "05401");
+    await user.type(screen.getByLabelText("ZIP code"), "05401");
     await user.type(screen.getByLabelText("Password"), "Password1234");
-    await user.type(screen.getByLabelText("Confirm Password"), "Password1234");
-    await user.click(screen.getByRole("button", { name: "Sign Up" }));
+    await user.type(screen.getByLabelText("Confirm password"), "Password1234");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
 
     expect(mockPush).toHaveBeenCalledWith("/elections");
   });
@@ -111,11 +114,11 @@ describe("after signing in", () => {
         jsonResponse({ state: "vt", districts: [{ number: 0, proportion: 1 }] })
       )
       .mockResolvedValueOnce(jsonResponse({ success: true }));
-    const user = userEvent.setup();
+    const user = userEvent.setup({ delay: null });
     render(<OnboardingPage />);
 
-    await user.type(screen.getByLabelText("ZIP Code"), "05401");
-    await user.click(screen.getByRole("button", { name: "Find My District" }));
+    await user.type(screen.getByLabelText("ZIP code"), "05401");
+    await user.click(screen.getByRole("button", { name: "Find my district" }));
 
     expect(mockUpdateSession).toHaveBeenCalled();
     expect(mockPush).toHaveBeenCalledWith("/elections");

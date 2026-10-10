@@ -8,12 +8,15 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import GlassCard from "@/components/ui/GlassCard";
+import Card from "@/components/ui/Card";
+import Alert from "@/components/ui/Alert";
 import { stateName } from "@/lib/states";
 import type { ElectionDate, ElectionType, FecOffice } from "@/lib/fec";
 
 interface UpcomingElectionsCalendarProps {
   dates: ElectionDate[];
+  /** The source could not be loaded; do not confuse this with no dates. */
+  unavailable?: boolean;
   /** Max number of grouped rows to show. */
   limit?: number;
   /** Highlight rows for this state (the user's). */
@@ -61,14 +64,25 @@ function groupKey(d: ElectionDate): string {
   return [d.date, d.state ?? "_", d.type, d.party ?? "_"].join("|");
 }
 
-function formatShortDate(iso: string): string {
-  const d = new Date(iso);
+// FEC election dates are calendar dates, not instants in the viewer's timezone.
+function calendarDate(iso: string): Date {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`);
+}
+
+function formatMonth(iso: string): string {
+  const d = calendarDate(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-US", { month: "short" });
+}
+
+function formatDayNumber(iso: string): string {
+  const d = calendarDate(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return String(d.getDate());
 }
 
 function formatDayOfWeek(iso: string): string {
-  const d = new Date(iso);
+  const d = calendarDate(iso);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { weekday: "short" });
 }
@@ -122,23 +136,20 @@ function buildLabel(g: GroupedElection): {
 
 export default function UpcomingElectionsCalendar({
   dates,
+  unavailable = false,
   limit = 6,
   highlightState,
   now = new Date(),
-  title = "Upcoming Federal Elections",
+  title = "Upcoming federal election dates",
   subtitle,
   viewAllHref,
   viewAllLabel = "View full calendar",
   groupByMonth = false,
 }: UpcomingElectionsCalendarProps) {
-  const startMs = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
+  const startMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
   const upcoming = dates.filter((d) => {
-    const t = new Date(d.date).getTime();
+    const t = calendarDate(d.date).getTime();
     return !isNaN(t) && t >= startMs;
   });
 
@@ -162,46 +173,45 @@ export default function UpcomingElectionsCalendar({
     }
   }
 
-  const sorted = [...groups.values()].sort((a, b) =>
-    a.date.localeCompare(b.date)
-  );
+  const sorted = [...groups.values()].sort((a, b) => a.date.localeCompare(b.date));
   const visible = limit ? sorted.slice(0, limit) : sorted;
   const truncated = sorted.length > visible.length;
-
-  if (visible.length === 0) return null;
 
   const highlightUpper = highlightState?.toUpperCase() ?? null;
 
   const renderRow = (g: GroupedElection, key: string) => {
-    const isUser =
-      !!highlightUpper && !!g.state && g.state === highlightUpper;
+    const isUser = !!highlightUpper && !!g.state && g.state === highlightUpper;
     const { scope, what } = buildLabel(g);
     const href = buildHref(g);
     return (
-      <li key={key} className="first:[&>a>div]:pt-0 last:[&>a>div]:pb-0">
-        <Link href={href} className="block">
-          <div className="flex items-start gap-3 py-2.5 px-1 -mx-1 rounded-md transition-colors hover:bg-white/[0.03]">
-            <div className="w-12 shrink-0 text-right">
-              <div className="text-cream font-medium text-sm tabular-nums">
-                {formatShortDate(g.date)}
-              </div>
-              <div className="text-cream/40 text-[0.65rem] uppercase tracking-wider">
-                {formatDayOfWeek(g.date)}
-              </div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-cream text-sm capitalize">
-                {scope}
-                {isUser && (
-                  <span className="ml-2 text-[0.55rem] uppercase tracking-widest text-gold border border-gold/40 rounded px-1.5 py-0.5 align-middle">
-                    Your state
-                  </span>
-                )}
-              </p>
-              <p className="text-cream/45 text-xs mt-0.5">{what}</p>
-            </div>
-            <ChevronRight className="h-4 w-4 text-cream/30 shrink-0 mt-0.5" />
-          </div>
+      <li key={key}>
+        <Link
+          href={href}
+          className="group -mx-2 flex items-center gap-4 rounded-xl px-2 py-3 transition-colors hover:bg-white/[0.03]"
+        >
+          <span
+            className={`flex w-14 shrink-0 flex-col items-center rounded-xl border py-1.5 ${
+              isUser ? "border-gold/50 bg-gold/10" : "border-line-strong bg-surface-2"
+            }`}
+          >
+            <span className={`text-[0.7rem] font-semibold uppercase tracking-wider ${isUser ? "text-gold-bright" : "text-ink-3"}`}>
+              {formatMonth(g.date)}
+            </span>
+            <span className="text-xl font-semibold leading-tight tabular-nums text-ink">{formatDayNumber(g.date)}</span>
+            <span className="text-[0.7rem] text-ink-3">{formatDayOfWeek(g.date)}</span>
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="font-medium capitalize text-ink">{scope}</span>
+              {isUser && (
+                <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-xs font-medium text-gold-bright">
+                  Your state
+                </span>
+              )}
+            </span>
+            <span className="mt-0.5 block text-sm text-ink-3">{what}</span>
+          </span>
+          <ChevronRight className="h-4 w-4 shrink-0 text-ink-3 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
         </Link>
       </li>
     );
@@ -219,59 +229,55 @@ export default function UpcomingElectionsCalendar({
       byMonth.set(monthKey, arr);
     }
     listChildren = [...byMonth.entries()].map(([monthKey, entries]) => (
-      <li key={monthKey}>
-        <h3 className="text-[0.65rem] uppercase tracking-widest text-cream/50 mt-4 mb-1 first:mt-0">
-          {monthLabel(monthKey)}
-        </h3>
-        <ul className="divide-y divide-white/5">
-          {entries.map((g, i) =>
-            renderRow(g, `${g.date}-${g.state ?? ""}-${g.type}-${i}`)
-          )}
+      <li key={monthKey} className="pt-5 first:pt-0">
+        <h3 className="mb-1 text-sm font-semibold text-ink-2">{monthLabel(monthKey)}</h3>
+        <ul className="divide-y divide-line/70">
+          {entries.map((g, i) => renderRow(g, `${g.date}-${g.state ?? ""}-${g.type}-${i}`))}
         </ul>
       </li>
     ));
   } else {
-    listChildren = visible.map((g, i) =>
-      renderRow(g, `${g.date}-${g.state ?? ""}-${g.type}-${i}`)
-    );
+    listChildren = visible.map((g, i) => renderRow(g, `${g.date}-${g.state ?? ""}-${g.type}-${i}`));
   }
 
   return (
-    <GlassCard>
-      <div className="flex items-baseline justify-between gap-3 mb-1">
-        {viewAllHref ? (
-          <Link
-            href={viewAllHref}
-            className="font-brand text-lg text-cream hover:text-gold inline-flex items-center gap-1"
-          >
-            {title}
-            <ChevronRight className="h-4 w-4" />
-          </Link>
-        ) : (
-          <h2 className="font-brand text-lg text-cream">{title}</h2>
-        )}
-        <span className="text-cream/40 text-xs shrink-0">Source: FEC</span>
+    <Card as="section">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {viewAllHref ? (
+            <Link href={viewAllHref} className="inline-flex items-center gap-1 text-lg font-semibold text-ink hover:text-gold-bright">
+              {title}
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </Link>
+          ) : (
+            <h2 className="text-lg font-semibold text-ink">{title}</h2>
+          )}
+          {subtitle && <p className="mt-1 text-sm leading-relaxed text-ink-3">{subtitle}</p>}
+        </div>
+        <span className="shrink-0 rounded-full border border-line-strong px-2.5 py-0.5 text-xs text-ink-3">Source: FEC</span>
       </div>
-      {subtitle && (
-        <p className="text-cream/40 text-xs mb-3 leading-relaxed">
-          {subtitle}
+      {unavailable && (
+        <Alert tone="warning" className="mt-4">
+          Some election dates could not be loaded. The list may be incomplete; check your election office for confirmed dates.
+        </Alert>
+      )}
+      {visible.length === 0 && !unavailable && (
+        <p className="mt-4 rounded-xl border border-dashed border-line-strong px-4 py-6 text-center text-sm leading-relaxed text-ink-3">
+          No upcoming dates were returned by the FEC for this selection. State and local elections may still be scheduled.
         </p>
       )}
-      <ul className={groupByMonth ? "" : "divide-y divide-white/5"}>
-        {listChildren}
-      </ul>
+      {visible.length > 0 && (
+        <ul className={`mt-4 ${groupByMonth ? "" : "divide-y divide-line/70"}`}>{listChildren}</ul>
+      )}
       {viewAllHref && truncated && (
-        <div className="mt-3 pt-3 border-t border-white/5">
-          <Link
-            href={viewAllHref}
-            className="inline-flex items-center gap-1 text-gold/90 hover:text-gold text-xs"
-          >
+        <div className="mt-3 border-t border-line pt-3">
+          <Link href={viewAllHref} className="inline-flex items-center gap-1 text-sm font-medium text-gold-bright hover:text-gold">
             {viewAllLabel} ({sorted.length - visible.length} more)
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </div>
       )}
-    </GlassCard>
+    </Card>
   );
 }
 

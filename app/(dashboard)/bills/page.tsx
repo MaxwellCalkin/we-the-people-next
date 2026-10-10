@@ -1,36 +1,46 @@
 export const dynamic = "force-dynamic";
 
-import { auth } from "@/lib/auth";
-import connectDB from "@/lib/db";
+import type { Metadata } from "next";
 import { searchBills } from "@/lib/congress";
-import User from "@/models/User";
+import { getTrendingBills } from "@/lib/trending";
+import { getUserVotes } from "@/lib/viewer";
+import { initialBillsTab } from "@/lib/bills-tab";
 import BillsPageTabs from "@/components/features/BillsPageTabs";
+import PageHeader from "@/components/ui/PageHeader";
+import SearchBar from "@/components/ui/SearchBar";
 
-export default async function BillsPage() {
-  await connectDB();
-  const session = await auth();
+export const metadata: Metadata = { title: "Bills" };
 
-  const newBills = await searchBills(null);
+export default async function BillsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
 
-  let userVotedSlugs: string[] = [];
-  if (session?.user?.id) {
-    const user = await User.findById(session.user.id).lean();
-    if (user) {
-      userVotedSlugs = [
-        ...(user.yeaBillSlugs || []),
-        ...(user.nayBillSlugs || []),
-      ];
-    }
-  }
+  const [newBills, trendingBills, userVotes] = await Promise.all([
+    searchBills(null).catch((err) => {
+      console.error("Failed to load new bills:", err instanceof Error ? err.message : err);
+      return [];
+    }),
+    getTrendingBills(50).catch((err) => {
+      console.error("Failed to load trending bills:", err instanceof Error ? err.message : err);
+      return [];
+    }),
+    getUserVotes(),
+  ]);
+
+  const initialTab = initialBillsTab(tab, trendingBills.length);
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="font-brand text-3xl sm:text-4xl text-gradient mb-6">
-        Bills
-      </h1>
+    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+      <PageHeader
+        eyebrow="Legislation"
+        title="Bills in Congress"
+        description="Read what's moving through Congress and cast your own vote. We'll compare it with how your senators and representative vote."
+        actions={<SearchBar className="w-full sm:w-72 lg:hidden" />}
+      />
       <BillsPageTabs
+        initialTab={initialTab}
         initialNewBills={newBills}
-        userVotedSlugs={userVotedSlugs}
+        trendingBills={trendingBills}
+        userVotes={userVotes}
       />
     </div>
   );

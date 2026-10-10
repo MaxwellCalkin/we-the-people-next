@@ -8,6 +8,13 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
+    server: {
+      deps: {
+        // next-auth's ESM imports "next/server" with no extension, which Node's
+        // resolver rejects (next has no "exports" map); let Vite resolve it.
+        inline: ["next-auth"],
+      },
+    },
   },
   resolve: {
     alias: {

@@ -221,9 +221,13 @@ export default function UpvoteHeatMap({
 
   if (totalUpvotes < MIN_TO_MAP) {
     return (
-      <p className="text-cream/40 text-sm text-center py-8">
-        Not enough upvotes yet to map this proposal.
-      </p>
+      <div className="flex flex-col items-center py-6 text-center">
+        <MapPin className="h-6 w-6 text-ink-3" aria-hidden="true" />
+        <h3 className="mt-3 font-semibold text-ink">Where the support is</h3>
+        <p className="mt-1 max-w-sm text-sm text-ink-3">
+          The map appears once this proposal has {MIN_TO_MAP} upvotes. Share it to help it get there.
+        </p>
+      </div>
     );
   }
 
@@ -237,42 +241,42 @@ export default function UpvoteHeatMap({
   return (
     <div>
       {/* Controls */}
-      <div className="flex items-center justify-between gap-3 mb-3 min-h-[2rem]">
+      <div className="mb-4 flex min-h-[2.25rem] flex-wrap items-center justify-between gap-3">
         {view === "national" ? (
           <>
             <div>
-              <h3 className="font-brand text-lg text-cream">Where the support is</h3>
-              {districtsAvailable && (
-                <p className="text-cream/40 text-xs">Click a state to see its districts.</p>
-              )}
+              <h3 className="font-semibold text-ink">Where the support is</h3>
+              {districtsAvailable && <p className="text-sm text-ink-3">Select a state to see its districts.</p>}
             </div>
             {canFindMine && (
               <button
+                type="button"
                 onClick={() => drillTo(vState!)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-glass-border px-3 py-1.5 text-xs text-cream/70 hover:text-gold hover:border-gold/40 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-1.5 text-sm text-ink-2 transition-colors hover:border-gold/50 hover:text-ink"
               >
-                <MapPin className="h-3.5 w-3.5" /> Find my district
+                <MapPin className="h-4 w-4" aria-hidden="true" /> Find my district
               </button>
             )}
           </>
         ) : (
           <>
             <button
+              type="button"
               onClick={backToUS}
-              className="inline-flex items-center gap-1.5 text-sm text-cream/70 hover:text-gold transition-colors"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-2 transition-colors hover:text-ink"
             >
-              <ArrowLeft className="h-4 w-4" /> Back to US
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to the U.S.
             </button>
-            <span className="text-cream/60 text-sm">{selectedState} districts</span>
-            <div className="inline-flex rounded-lg border border-glass-border overflow-hidden">
-              <button onClick={() => zoomBy(1.5)} aria-label="Zoom in" className="px-2 py-1.5 text-cream/60 hover:text-gold transition-colors">
-                <Plus className="h-4 w-4" />
+            <span className="text-sm text-ink-3">{(selectedState && getStateInfo(selectedState)?.name) || selectedState} districts</span>
+            <div className="inline-flex overflow-hidden rounded-lg border border-line-strong">
+              <button type="button" onClick={() => zoomBy(1.5)} aria-label="Zoom in" className="px-2.5 py-1.5 text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink">
+                <Plus className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out" className="px-2 py-1.5 text-cream/60 hover:text-gold transition-colors">
-                <Minus className="h-4 w-4" />
+              <button type="button" onClick={() => zoomBy(1 / 1.5)} aria-label="Zoom out" className="border-x border-line-strong px-2.5 py-1.5 text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink">
+                <Minus className="h-4 w-4" aria-hidden="true" />
               </button>
-              <button onClick={resetZoom} aria-label="Reset zoom" className="px-2 py-1.5 text-cream/60 hover:text-gold transition-colors">
-                <RotateCcw className="h-4 w-4" />
+              <button type="button" onClick={resetZoom} aria-label="Reset zoom" className="px-2.5 py-1.5 text-ink-2 transition-colors hover:bg-white/[0.06] hover:text-ink">
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
               </button>
             </div>
           </>
@@ -373,6 +377,15 @@ export default function UpvoteHeatMap({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="mt-3 flex items-center justify-end gap-2 text-xs text-ink-3" aria-hidden="true">
+        <span>Fewer</span>
+        <span
+          className="h-2 w-28 rounded-full"
+          style={{ background: "linear-gradient(90deg, rgba(212,175,55,0.15), rgba(212,175,55,1))" }}
+        />
+        <span>More upvotes</span>
       </div>
     </div>
   );

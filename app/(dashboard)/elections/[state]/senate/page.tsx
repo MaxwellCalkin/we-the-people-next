@@ -1,6 +1,7 @@
 // app/(dashboard)/elections/[state]/senate/page.tsx
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { currentCycle } from "@/lib/fec";
@@ -9,9 +10,16 @@ import { getStateInfo, stateName } from "@/lib/states";
 import connectDB from "@/lib/db";
 import RaceCandidateList from "@/components/features/RaceCandidateList";
 import SittingMemberBanner from "@/components/features/SittingMemberBanner";
+import PageHeader from "@/components/ui/PageHeader";
 
 interface SenatePageProps {
   params: Promise<{ state: string }>;
+}
+
+export async function generateMetadata({ params }: SenatePageProps): Promise<Metadata> {
+  const { state } = await params;
+  const info = getStateInfo(state);
+  return { title: info ? `${info.name} Senate race` : "Senate race" };
 }
 
 export default async function StateSenatePage({ params }: SenatePageProps) {
@@ -23,45 +31,44 @@ export default async function StateSenatePage({ params }: SenatePageProps) {
   await connectDB();
   const cycle = currentCycle();
 
-  const [candidates, sittingMember] = await Promise.all([
-    loadRaceCandidatesWithFinance({
-      state,
-      office: "S",
-      cycle,
-    }),
+  const [candidatesResult, sittingMemberResult] = await Promise.allSettled([
+    loadRaceCandidatesWithFinance({ state, office: "S", cycle }),
     getSittingMember({ state, office: "S" }),
   ]);
+  const candidates = candidatesResult.status === "fulfilled" ? candidatesResult.value : [];
+  const sittingMember = sittingMemberResult.status === "fulfilled" ? sittingMemberResult.value : null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <header>
-        <p className="text-cream/40 text-xs uppercase tracking-widest mb-1">
-          <Link href="/elections" className="hover:text-cream">
-            Elections
-          </Link>
-          <span className="mx-1.5">/</span>
-          <Link href={`/elections/${state}`} className="hover:text-cream">
-            {info.name}
-          </Link>
-        </p>
-        <h1 className="font-brand text-3xl sm:text-4xl text-gradient">
-          {info.name} — U.S. Senate
-        </h1>
-        <p className="text-cream/40 text-sm mt-1">
-          {cycle} general election. Sorted by total receipts.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl space-y-8 px-4 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumbs={[
+          { label: "Elections", href: "/elections" },
+          { label: info.name, href: `/elections/${state}` },
+          { label: "U.S. Senate" },
+        ]}
+        eyebrow={`Federal candidate research · ${cycle - 1}–${cycle} cycle`}
+        title={`${info.name} · U.S. Senate`}
+        description={
+          <>
+            FEC filings and campaign finance.{" "}
+            <Link href="/elections" className="font-medium text-gold-bright underline-offset-2 hover:underline">
+              Look up your official ballot
+            </Link>
+          </>
+        }
+      />
 
       <SittingMemberBanner
         member={sittingMember}
         office="U.S. Senate"
         seatLabel={`${stateName(state)} seat`}
-        emptyMessage={`Heard doesn’t have a confirmed sitting senator on file for the seat being contested in ${info.name} this cycle. (Each state has two senators; only one may be up.)`}
+        emptyMessage={`A sitting senator couldn't be matched to these records. FEC filings alone don't establish which Senate seats are being contested in ${info.name}.`}
       />
 
       <RaceCandidateList
         candidates={candidates}
-        emptyMessage={`No Senate race in ${info.name} this cycle.`}
+        unavailable={candidatesResult.status === "rejected"}
+        emptyMessage={`No Senate candidate records were returned for ${info.name}. This doesn't establish whether a Senate election will be held; check the official election office.`}
       />
     </div>
   );

@@ -1,7 +1,10 @@
+import { Loader2 } from "lucide-react";
+
 export default function AuthLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-navy-900">
-      <div className="w-10 h-10 border-3 border-gold/30 border-t-gold rounded-full animate-spin" />
+    <div className="flex flex-1 items-center justify-center" role="status">
+      <Loader2 className="h-8 w-8 animate-spin text-gold" aria-hidden="true" />
+      <span className="sr-only">Loading</span>
     </div>
   );
 }

@@ -1,33 +1,26 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import AnimatedCounter from "@/components/ui/AnimatedCounter";
+import VoteSplitBar from "@/components/ui/VoteSplitBar";
 
 interface VoteStatsProps {
-  billSlug: string;
+  yeas: number;
+  nays: number;
+  districtYeas: number;
+  districtNays: number;
+  /** e.g. "PA-12"; omit when the viewer has no district on file. */
+  districtLabel?: string;
 }
 
-export default function VoteStats({ billSlug }: VoteStatsProps) {
-  const [data, setData] = useState({
-    yeas: 0,
-    nays: 0,
-    yeasByDistrict: 0,
-    naysByDistrict: 0,
-  });
-
-  useEffect(() => {
-    fetch(`/api/bills/votes?slug=${encodeURIComponent(billSlug)}`)
-      .then((res) => res.json())
-      .then(setData)
-      .catch(console.error);
-  }, [billSlug]);
-
+export default function VoteStats({ yeas, nays, districtYeas, districtNays, districtLabel }: VoteStatsProps) {
   return (
-    <div className="grid grid-cols-2 gap-6">
-      <AnimatedCounter target={data.yeas} label="Total Heard Yeas" />
-      <AnimatedCounter target={data.nays} label="Total Heard Nays" />
-      <AnimatedCounter target={data.yeasByDistrict} label="District Yeas" />
-      <AnimatedCounter target={data.naysByDistrict} label="District Nays" />
+    <div className="space-y-6">
+      <VoteSplitBar label="Everyone on Heard" yeas={yeas} nays={nays} />
+      {districtLabel && (
+        <VoteSplitBar
+          label={`Your district (${districtLabel})`}
+          yeas={districtYeas}
+          nays={districtNays}
+          emptyText="No votes from your district yet"
+        />
+      )}
     </div>
   );
 }

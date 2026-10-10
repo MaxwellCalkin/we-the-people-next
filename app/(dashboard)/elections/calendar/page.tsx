@@ -1,17 +1,17 @@
 // app/(dashboard)/elections/calendar/page.tsx
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import connectDB from "@/lib/db";
 import { currentCycle, type ElectionDate } from "@/lib/fec";
-import {
-  loadElectionDates,
-  mongoDatesStore,
-  liveDatesFetcher,
-} from "@/lib/election-cache";
+import { loadElectionDates, mongoDatesStore, liveDatesFetcher } from "@/lib/election-cache";
 import { isValidStateCode, stateName } from "@/lib/states";
 import UpcomingElectionsCalendar from "@/components/features/UpcomingElectionsCalendar";
+import PageHeader from "@/components/ui/PageHeader";
+
+export const metadata: Metadata = { title: "Federal election calendar" };
 
 interface PageProps {
   searchParams: Promise<{ state?: string; mine?: string }>;
@@ -24,9 +24,7 @@ export default async function ElectionsCalendarPage({ searchParams }: PageProps)
   const cycle = currentCycle();
 
   const userState =
-    session?.user?.state && isValidStateCode(session.user.state)
-      ? session.user.state.toUpperCase()
-      : null;
+    session?.user?.state && isValidStateCode(session.user.state) ? session.user.state.toUpperCase() : null;
 
   // Resolve filter: "?mine=1" wins if the user has a state on file; otherwise
   // ?state=XX (case-insensitive) takes effect.
@@ -42,66 +40,55 @@ export default async function ElectionsCalendarPage({ searchParams }: PageProps)
   // elections, and the next presidential primaries — not just May–November
   // of one year.
   const years = [cycle, cycle + 1, cycle + 2];
-  const dateArrays = await Promise.all(
+  const dateResults = await Promise.allSettled(
     years.map((y) =>
       activeStateFilter
-        ? safeLoadDates(activeStateFilter, y)
-        : safeLoadDates("national", y)
+        ? loadElectionDates(activeStateFilter, y, mongoDatesStore, liveDatesFetcher)
+        : loadElectionDates("national", y, mongoDatesStore, liveDatesFetcher)
     )
   );
-  let dates: ElectionDate[] = dateArrays.flat();
+  let dates: ElectionDate[] = dateResults.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
+  const datesUnavailable = dateResults.some((result) => result.status === "rejected");
 
   // /election-dates/?election_state=XX should already constrain, but
   // defensively filter in case FEC returns nationwide rows mixed in.
   if (activeStateFilter) {
-    dates = dates.filter(
-      (d) => !d.state || d.state.toUpperCase() === activeStateFilter
-    );
+    dates = dates.filter((d) => !d.state || d.state.toUpperCase() === activeStateFilter);
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <header>
-        <p className="text-cream/40 text-xs uppercase tracking-widest mb-1">
-          <Link href="/elections" className="hover:text-cream">
-            Elections
-          </Link>
-        </p>
-        <h1 className="font-brand text-3xl sm:text-4xl text-gradient">
-          Full Election Calendar
-        </h1>
-        <p className="text-cream/50 text-sm mt-2 max-w-2xl">
-          Every federal primary, runoff, and general election from{" "}
-          {years[0]} through {years[years.length - 1]}. Click any row to jump
-          to that race&apos;s candidates and campaign finance. Years beyond the
-          current cycle may be sparse until FEC publishes them.
-        </p>
-      </header>
+    <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+      <PageHeader
+        breadcrumbs={[{ label: "Elections", href: "/elections" }, { label: "Calendar" }]}
+        title="Federal election calendar"
+        description={
+          <>
+            Federal dates published by the FEC for {years[0]} through {years[years.length - 1]}. This calendar may be
+            incomplete and doesn&apos;t include state or local elections. Confirm dates and eligibility with your election
+            office.
+          </>
+        }
+      />
 
       <CalendarFilterBar
         userState={userState}
         active={activeStateFilter}
-        explicitStateParam={
-          stateParam && isValidStateCode(stateParam)
-            ? stateParam.toUpperCase()
-            : null
-        }
+        explicitStateParam={stateParam && isValidStateCode(stateParam) ? stateParam.toUpperCase() : null}
       />
 
       <UpcomingElectionsCalendar
         dates={dates}
+        unavailable={datesUnavailable}
         limit={1000}
         highlightState={userState}
         groupByMonth
         title={
-          activeStateFilter
-            ? `Upcoming federal elections in ${stateName(activeStateFilter)}`
-            : "All upcoming federal elections"
+          activeStateFilter ? `Upcoming federal elections in ${stateName(activeStateFilter)}` : "Upcoming federal dates on file"
         }
         subtitle={
           activeStateFilter
-            ? `Only elections that affect ${stateName(activeStateFilter)} are shown. Clear the filter to see every state.`
-            : "Federal primary, runoff, and general election dates across all 50 states, D.C., and the territories."
+            ? `Dates listed for ${stateName(activeStateFilter)}. A statewide date may not apply to your address or primary eligibility.`
+            : "Federal primary, runoff, and general election dates by state. Coverage depends on the FEC records available."
         }
       />
     </div>
@@ -117,25 +104,12 @@ function CalendarFilterBar({
   active: string | null;
   explicitStateParam: string | null;
 }) {
-  const showMineButton = !!userState;
-  const mineActive = active === userState;
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-cream/40 text-xs uppercase tracking-widest mr-1">
-        Show:
-      </span>
-      <FilterPill
-        href="/elections/calendar"
-        active={!active}
-        label="All states"
-      />
-      {showMineButton && (
-        <FilterPill
-          href="/elections/calendar?mine=1"
-          active={mineActive}
-          label={`Only ${stateName(userState)}`}
-        />
+    <div className="mb-6 flex flex-wrap items-center gap-2">
+      <span className="mr-1 text-sm text-ink-3">Show</span>
+      <FilterPill href="/elections/calendar" active={!active} label="All states" />
+      {userState && (
+        <FilterPill href="/elections/calendar?mine=1" active={active === userState} label={`Only ${stateName(userState)}`} />
       )}
       {explicitStateParam && explicitStateParam !== userState && (
         <FilterPill
@@ -144,53 +118,28 @@ function CalendarFilterBar({
           label={`Only ${stateName(explicitStateParam)}`}
         />
       )}
-      <span className="text-cream/35 text-xs hidden sm:inline">
+      <span className="ml-1 hidden text-sm text-ink-3 sm:inline">
         or browse{" "}
-        <Link
-          href="/elections#browse"
-          className="text-gold/70 hover:text-gold underline"
-        >
+        <Link href="/elections#browse" className="font-medium text-gold-bright underline-offset-2 hover:underline">
           any state&apos;s page
-        </Link>{" "}
-        and follow the date link.
+        </Link>
       </span>
     </div>
   );
 }
 
-function FilterPill({
-  href,
-  active,
-  label,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-}) {
+function FilterPill({ href, active, label }: { href: string; active: boolean; label: string }) {
   return (
     <Link
       href={href}
-      className={`text-xs rounded-md px-2.5 py-1 border transition-colors ${
+      aria-current={active ? "page" : undefined}
+      className={`rounded-full border px-3 py-1 text-sm transition-colors ${
         active
-          ? "border-gold/60 bg-gold/10 text-gold"
-          : "border-glass-border bg-glass-bg text-cream/70 hover:text-cream hover:border-cream/30"
+          ? "border-gold/60 bg-gold/10 font-medium text-gold-bright"
+          : "border-line-strong text-ink-2 hover:border-line-input hover:text-ink"
       }`}
     >
       {label}
     </Link>
   );
-}
-
-async function safeLoadDates(scope: string, electionYear: number) {
-  try {
-    return await loadElectionDates(
-      scope,
-      electionYear,
-      mongoDatesStore,
-      liveDatesFetcher
-    );
-  } catch (e) {
-    console.error("Election dates lookup failed for", scope, electionYear, e);
-    return [];
-  }
 }
