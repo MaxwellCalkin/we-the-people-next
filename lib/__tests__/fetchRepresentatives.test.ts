@@ -114,23 +114,48 @@ describe("fetchRepresentatives", () => {
     }
   );
 
-  it("does not mistake an at-large House member (district 0) for a senator", async () => {
+  // The docs say an at-large seat is district 0; in practice Congress.gov
+  // lists Vermont's at-large member with no district at all.
+  it.each([
+    { label: "district 0", district: 0 },
+    { label: "no district number", district: undefined },
+  ])(
+    "does not mistake an at-large House member with $label for a senator",
+    async ({ district }) => {
+      const atLargeRep = { ...houseMember("H1", "At-Large Rep", 0), district };
+      serveMembers({
+        VT: [atLargeRep, senator("S1", "Senator One"), senator("S2", "Senator Two")],
+        "VT/0": [atLargeRep],
+      });
+
+      const { senators, houseRep } = await fetchRepresentatives("vt", "0");
+
+      expect(senators.map((s) => s.name)).toEqual([
+        "Senator One",
+        "Senator Two",
+      ]);
+      expect(houseRep?.name).toBe("At-Large Rep");
+    }
+  );
+
+  it("returns the district's current House member, not one redistricted out of it", async () => {
+    // Congress.gov's CA-12 lookup lists Pelosi (now CA-11) ahead of Simon (CA-12).
     serveMembers({
-      VT: [
-        houseMember("H1", "At-Large Rep", 0),
+      CA: [
+        houseMember("H11", "Redistricted Rep", 11),
+        houseMember("H12", "Current Rep", 12),
         senator("S1", "Senator One"),
         senator("S2", "Senator Two"),
       ],
-      "VT/0": [houseMember("H1", "At-Large Rep", 0)],
+      "CA/12": [
+        houseMember("H11", "Redistricted Rep", 11),
+        houseMember("H12", "Current Rep", 12),
+      ],
     });
 
-    const { senators, houseRep } = await fetchRepresentatives("vt", "0");
+    const { houseRep } = await fetchRepresentatives("ca", "12");
 
-    expect(senators.map((s) => s.name)).toEqual([
-      "Senator One",
-      "Senator Two",
-    ]);
-    expect(houseRep?.name).toBe("At-Large Rep");
+    expect(houseRep?.name).toBe("Current Rep");
   });
 
   it("treats a senator who used to serve in the House as a senator, not as the district's House member", async () => {
