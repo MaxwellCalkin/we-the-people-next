@@ -44,6 +44,10 @@ export default function Avatar({
         alt={name}
         width={size}
         height={size}
+        // Congress.gov already serves member photos as small JPEGs. Loading
+        // them directly keeps the member directory's ~540 photos from using
+        // up Vercel's free image optimization quota.
+        unoptimized={src.startsWith("https://www.congress.gov/")}
         className={`${radius} object-cover object-top bg-surface-3 ${className}`}
         style={{ width: size, height: size }}
         onError={() => setImgError(true)}

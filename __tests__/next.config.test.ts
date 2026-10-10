@@ -42,3 +42,21 @@ describe("next.config redirects", () => {
     expect(getRedirectUrl(res)).toBe("https://heard-us.vercel.app/proposals");
   });
 });
+
+describe("next.config security headers", () => {
+  it.each([
+    "/",
+    "/bills",
+    // The proxy skips these, so the headers must come from next.config.
+    "/login",
+    "/signup",
+    "/onboarding",
+    "/api/ballot/elections",
+    "/icon.svg",
+  ])("sends clickjacking, sniffing, and referrer protection on %s", async (path) => {
+    const res = await route(`https://heard-us.vercel.app${path}`);
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+});

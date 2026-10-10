@@ -12,8 +12,11 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/image", () => ({
-  // eslint-disable-next-line @next/next/no-img-element
-  default: (props: Record<string, unknown>) => <img {...props} alt={(props.alt as string) || ""} />,
+  // `unoptimized` is a next/image prop, not an <img> attribute.
+  default: ({ unoptimized, ...props }: Record<string, unknown>) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img {...props} data-unoptimized={String(Boolean(unoptimized))} alt={(props.alt as string) || ""} />
+  ),
 }));
 
 afterEach(cleanup);
@@ -40,6 +43,39 @@ describe("MemberDirectory", () => {
   it("ranks ties by the larger sample of shared votes and puts unscored members last", () => {
     render(<MemberDirectory members={members} />);
     expect(rowNames()).toEqual(["Rep. Wesley Hunt", "Rep. Alma Adams", "Sen. John Fetterman", "Sen. Bernard Sanders"]);
+  });
+
+  it("lists members without a score in last-name order after the ranked ones", () => {
+    render(
+      <MemberDirectory
+        members={[
+          { ...base, bioguideId: "S000033", name: "Sanders, Bernard", party: "Independent", state: "Vermont", chamber: "Senate" },
+          { ...base, bioguideId: "M001153", name: "Murkowski, Lisa", party: "Republican", state: "Alaska", chamber: "Senate" },
+          { ...base, bioguideId: "A000001", name: "Adams, Alma", party: "Democratic", state: "North Carolina", district: 12, chamber: "House", communityScore: 50, matchingVotes: 1, totalCompared: 2 },
+        ]}
+      />
+    );
+    expect(rowNames()).toEqual(["Rep. Alma Adams", "Sen. Lisa Murkowski", "Sen. Bernard Sanders"]);
+  });
+
+  it("shows each member's Congress.gov photo, loaded straight from Congress.gov", () => {
+    const imageUrl = "https://www.congress.gov/img/member/6a986b632a68122e10181e6b_200.jpg";
+    render(
+      <MemberDirectory
+        members={[
+          { ...base, bioguideId: "W000832", name: "Wahab, Aisha", party: "Democratic", state: "California", district: 14, chamber: "House", imageUrl },
+          { ...base, bioguideId: "S000033", name: "Sanders, Bernard", party: "Independent", state: "Vermont", chamber: "Senate" },
+        ]}
+      />
+    );
+    const wahab = screen.getByRole("img", { name: "Aisha Wahab" });
+    expect(wahab).toHaveAttribute("src", imageUrl);
+    expect(wahab).toHaveAttribute("data-unoptimized", "true");
+    // Without a known photo, the usual bioguide file name is tried.
+    expect(screen.getByRole("img", { name: "Bernard Sanders" })).toHaveAttribute(
+      "src",
+      "https://www.congress.gov/img/member/s000033_200.jpg"
+    );
   });
 
   it("filters by chamber and by name", async () => {

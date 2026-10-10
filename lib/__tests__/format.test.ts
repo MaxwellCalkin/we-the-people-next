@@ -50,6 +50,11 @@ describe("displayName", () => {
   it("leaves names without a comma alone", () => {
     expect(displayName("Bernard Sanders")).toBe("Bernard Sanders");
   });
+
+  it("returns an empty name for a record without one instead of crashing", () => {
+    expect(displayName(undefined)).toBe("");
+    expect(displayName(null)).toBe("");
+  });
 });
 
 describe("formatPersonName", () => {
@@ -95,11 +100,25 @@ describe("stateCode and seatLabel", () => {
     expect(stateCode("Atlantis")).toBe("Atlantis");
   });
 
+  it("recognizes Congress.gov's name for the U.S. Virgin Islands", () => {
+    expect(stateCode("Virgin Islands")).toBe("VI");
+  });
+
   it("labels House seats with padded district numbers and Senate seats by state", () => {
     expect(seatLabel("House", "California", 7)).toBe("CA-07");
     expect(seatLabel("House", "ny", "14")).toBe("NY-14");
     expect(seatLabel("House", "Vermont", 0)).toBe("VT at-large");
     expect(seatLabel("Senate", "TX", null)).toBe("Texas");
+  });
+
+  it("labels an at-large seat that Congress.gov lists without a district", () => {
+    expect(seatLabel("House", "Wyoming", undefined)).toBe("WY at-large");
+  });
+
+  it("gives an empty label for a record without a state instead of crashing", () => {
+    expect(stateCode(undefined)).toBe("");
+    expect(seatLabel("House", undefined, 3)).toBe("");
+    expect(seatLabel("Senate", null)).toBe("");
   });
 });
 

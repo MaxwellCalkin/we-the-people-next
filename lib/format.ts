@@ -32,14 +32,16 @@ export function billChamber(slugOrType: string): "House" | "Senate" | null {
 /**
  * Congress.gov returns member names as "Last, First M." — show them the way
  * people say them. Suffixes after a second comma are kept: "Smith, John, Jr."
- * → "John Smith, Jr.". Names without a comma are returned unchanged.
+ * → "John Smith, Jr.". Names without a comma are returned unchanged, and a
+ * missing name becomes "".
  */
-export function displayName(name: string): string {
-  const parts = name
+export function displayName(name: string | null | undefined): string {
+  const value = (name ?? "").trim();
+  const parts = value
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
-  if (parts.length < 2) return name.trim();
+  if (parts.length < 2) return value;
   const [last, first, ...rest] = parts;
   const suffix = rest.join(", ");
   return `${first} ${last}${suffix ? `, ${suffix}` : ""}`;
@@ -97,12 +99,16 @@ export function partyInfo(party: string | null | undefined): PartyInfo {
   return { code: raw.charAt(0).toUpperCase(), label: raw };
 }
 
-const CODE_BY_NAME = new Map(STATES.map((s) => [s.name.toLowerCase(), s.code]));
+const CODE_BY_NAME = new Map([
+  ...STATES.map((s): [string, string] => [s.name.toLowerCase(), s.code]),
+  // Congress.gov's name for the territory.
+  ["virgin islands", "VI"],
+]);
 const NAME_BY_CODE = new Map(STATES.map((s) => [s.code, s.name]));
 
 /** Accepts "Pennsylvania", "pennsylvania", "PA" or "pa" and returns "PA". Unknown input is returned trimmed. */
-export function stateCode(nameOrCode: string): string {
-  const value = nameOrCode.trim();
+export function stateCode(nameOrCode: string | null | undefined): string {
+  const value = (nameOrCode ?? "").trim();
   const upper = value.toUpperCase();
   if (NAME_BY_CODE.has(upper)) return upper;
   return CODE_BY_NAME.get(value.toLowerCase()) ?? value;
@@ -110,11 +116,13 @@ export function stateCode(nameOrCode: string): string {
 
 /**
  * Short seat label: senators get their state's name, House members get
- * "PA-12". At-large seats (district 0 or missing) read "VT at-large".
+ * "PA-12". At-large seats (district 0 or missing) read "VT at-large". Without
+ * a state there's no seat to describe, so the label is "".
  */
-export function seatLabel(chamber: string, state: string, district?: number | string | null): string {
+export function seatLabel(chamber: string, state: string | null | undefined, district?: number | string | null): string {
   const code = stateCode(state);
-  if (chamber === "Senate") return NAME_BY_CODE.get(code) ?? state;
+  if (!code) return "";
+  if (chamber === "Senate") return NAME_BY_CODE.get(code) ?? code;
   const n = typeof district === "string" ? parseInt(district, 10) : district;
   if (!n) return `${code} at-large`;
   return `${code}-${String(n).padStart(2, "0")}`;
@@ -122,6 +130,14 @@ export function seatLabel(chamber: string, state: string, district?: number | st
 
 export function memberTitle(chamber: string): "Sen." | "Rep." {
   return chamber === "Senate" ? "Sen." : "Rep.";
+}
+
+/**
+ * Congress.gov's photo URL for a member, by bioguide ID. Newer photos have
+ * other file names, so prefer the API's `depiction.imageUrl` when it's known.
+ */
+export function memberPhotoUrl(bioguideId: string): string {
+  return `https://www.congress.gov/img/member/${bioguideId.toLowerCase()}_200.jpg`;
 }
 
 /** Calendar dates ("2026-10-05") are formatted without timezone drift. */

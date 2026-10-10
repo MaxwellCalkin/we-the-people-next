@@ -1,15 +1,15 @@
 // components/features/SittingMemberBanner.tsx
 //
 // "Currently held by X" line shown at the top of a race detail page. Source
-// is MemberScore (our own current-member data from Congress.gov), not the FEC
-// candidate roster — so it stays correct when the sitting member hasn't filed
-// for the upcoming election yet.
+// is Congress.gov's list of current members, not the FEC candidate roster —
+// so it stays correct when the sitting member hasn't filed for the upcoming
+// election yet.
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import PartyBadge from "@/components/ui/PartyBadge";
-import { displayName } from "@/lib/format";
+import { displayName, memberPhotoUrl } from "@/lib/format";
 import type { SittingMember } from "@/lib/elections";
 
 interface SittingMemberBannerProps {
@@ -32,7 +32,7 @@ export default function SittingMemberBanner({ member, office, seatLabel, emptyMe
   return (
     <div className="card card-interactive group flex items-center gap-4 p-4 sm:p-5">
       <Avatar
-        src={`https://www.congress.gov/img/member/${member.bioguideId.toLowerCase()}_200.jpg`}
+        src={member.imageUrl ?? memberPhotoUrl(member.bioguideId)}
         name={name}
         size={48}
         variant="neutral"

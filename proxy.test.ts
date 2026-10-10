@@ -50,12 +50,10 @@ async function visit(
   return res;
 }
 
-function expectPassedThroughWithSecurityHeaders(res: Response) {
+// Security headers are set in next.config.ts (see __tests__/next.config.test.ts).
+function expectPassedThrough(res: Response) {
   expect(res.status).toBe(200);
   expect(res.headers.get("location")).toBeNull();
-  expect(res.headers.get("x-frame-options")).toBe("DENY");
-  expect(res.headers.get("x-content-type-options")).toBe("nosniff");
-  expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
 }
 
 describe("proxy matcher", () => {
@@ -114,13 +112,13 @@ describe("proxy", () => {
     expect(res.headers.get("location")).toBe(`${ORIGIN}/onboarding`);
   });
 
-  it("lets a signed-in user with a district through, with security headers", async () => {
+  it("lets a signed-in user with a district through", async () => {
     const res = await visit(
       "/bills",
       await sessionFor({ state: "CA", cd: "12", needsOnboarding: false }),
     );
 
-    expectPassedThroughWithSecurityHeaders(res);
+    expectPassedThrough(res);
   });
 
   it('treats an at-large district (cd "0") as complete instead of looping to onboarding', async () => {
@@ -129,11 +127,11 @@ describe("proxy", () => {
       await sessionFor({ state: "AK", cd: "0", needsOnboarding: false }),
     );
 
-    expectPassedThroughWithSecurityHeaders(res);
+    expectPassedThrough(res);
   });
 
-  it("lets signed-out visitors through, with security headers", async () => {
-    expectPassedThroughWithSecurityHeaders(await visit("/bills"));
+  it("lets signed-out visitors through", async () => {
+    expectPassedThrough(await visit("/bills"));
   });
 
   it.each(["/onboarding", "/api/user/district"])(
@@ -164,7 +162,7 @@ describe("proxy when Auth.js is misconfigured", () => {
     try {
       const res = await visit("/bills", undefined, misconfiguredProxy);
 
-      expectPassedThroughWithSecurityHeaders(res);
+      expectPassedThrough(res);
     } finally {
       consoleError.mockRestore();
     }

@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import PartyBadge from "@/components/ui/PartyBadge";
 import { scoreTone } from "@/components/ui/AlignmentBadge";
-import { displayName, memberTitle, seatLabel } from "@/lib/format";
+import { displayName, memberPhotoUrl, memberTitle, seatLabel } from "@/lib/format";
 
 interface MemberCardProps {
   rank: number | null;
@@ -14,6 +14,8 @@ interface MemberCardProps {
   state: string;
   district: number | null;
   chamber: string;
+  /** Congress.gov's photo; falls back to the usual bioguide file name. */
+  imageUrl?: string;
   communityScore: number | null;
   matchingVotes: number;
   totalCompared: number;
@@ -27,6 +29,7 @@ export default function MemberCard({
   state,
   district,
   chamber,
+  imageUrl,
   communityScore,
   matchingVotes,
   totalCompared,
@@ -45,7 +48,7 @@ export default function MemberCard({
         {rank !== null ? `#${rank}` : "—"}
       </span>
       <Avatar
-        src={`https://www.congress.gov/img/member/${bioguideId.toLowerCase()}_200.jpg`}
+        src={imageUrl ?? memberPhotoUrl(bioguideId)}
         name={fullName}
         size={44}
         variant="neutral"

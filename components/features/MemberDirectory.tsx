@@ -16,6 +16,7 @@ interface MemberData {
   state: string;
   district: number | null;
   chamber: string;
+  imageUrl?: string;
   communityScore: number | null;
   matchingVotes: number;
   totalCompared: number;
@@ -53,7 +54,8 @@ export default function MemberDirectory({ members }: MemberDirectoryProps) {
 
     return [...result].sort((a, b) => {
       if (sort === "alignment") {
-        if (a.communityScore === null && b.communityScore === null) return displayName(a.name).localeCompare(displayName(b.name));
+        // Unscored members follow in last-name order (names are "Last, First").
+        if (a.communityScore === null && b.communityScore === null) return a.name.localeCompare(b.name);
         if (a.communityScore === null) return 1;
         if (b.communityScore === null) return -1;
         // Same score: the larger sample of shared votes ranks higher.
@@ -166,6 +168,7 @@ export default function MemberDirectory({ members }: MemberDirectoryProps) {
                   state={m.state}
                   district={m.district}
                   chamber={m.chamber}
+                  imageUrl={m.imageUrl}
                   communityScore={m.communityScore}
                   matchingVotes={m.matchingVotes}
                   totalCompared={m.totalCompared}

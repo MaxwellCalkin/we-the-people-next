@@ -9,13 +9,16 @@
 
 import ElectionRosterCache from "@/models/ElectionRosterCache";
 import CandidateFinanceCache from "@/models/CandidateFinanceCache";
-import MemberScore from "@/models/MemberScore";
 import type { IRosterCandidate } from "@/models/ElectionRosterCache";
+import type { MemberResult } from "@/types";
+import { fetchCurrentMembers } from "./congress";
 import {
   getRaceCandidatesWithTotals,
   type CandidateTotals,
   type FecOffice,
 } from "./fec";
+import { stateCode } from "./format";
+import { getStateInfo } from "./states";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,55 +31,50 @@ export interface SittingMember {
   bioguideId: string;
   name: string;
   party: string;
+  /** Congress.gov's official photo, when it has one. */
+  imageUrl?: string;
+}
+
+function toSittingMember(m: MemberResult): SittingMember {
+  return { bioguideId: m.id, name: m.name, party: m.party, imageUrl: m.imageUrl };
 }
 
 /**
- * Who currently holds a federal seat, according to Heard's own MemberScore
- * data (sourced from Congress.gov). Used to render "Currently held by X" on
- * race pages — works even when the sitting member hasn't filed for the
- * upcoming election yet (very common in primary season).
+ * Who currently holds a federal seat, from Congress.gov's list of current
+ * members. Used to render "Currently held by X" on race pages — works even
+ * when the sitting member hasn't filed for the upcoming election yet (very
+ * common in primary season).
  *
- * For a Senate seat, returns at most one senator if exactly one matches the
- * (state, "Senate") shape. Each state has two senators; if both are returned
- * we cannot disambiguate which one's seat is on this cycle's ballot, so we
- * return null and let the page omit the line rather than guess.
+ * For a Senate seat, returns a senator only when exactly one serves the
+ * state. Each state has two senators, and we cannot tell whose seat is on
+ * this cycle's ballot, so with both seated we return null and let the page
+ * omit the line rather than guess.
  */
 export async function getSittingMember(opts: {
   state: string;
   office: FecOffice;
+  /** As the race pages number it: an at-large seat is district 1. */
   district?: string;
 }): Promise<SittingMember | null> {
+  const info = getStateInfo(opts.state);
+  if (!info) return null;
   try {
+    const delegation = (await fetchCurrentMembers()).filter(
+      (m) => stateCode(m.state) === info.code
+    );
     if (opts.office === "H") {
-      const districtNum = opts.district
-        ? parseInt(opts.district, 10)
-        : null;
-      const doc = await MemberScore.findOne({
-        state: opts.state,
-        chamber: "House",
-        $or: [
-          { district: districtNum },
-          ...(districtNum === 1 ? [{ district: null }] : []),
-        ],
-      })
-        .select("bioguideId name party")
-        .lean();
-      return doc
-        ? { bioguideId: doc.bioguideId, name: doc.name, party: doc.party }
-        : null;
+      const house = delegation.filter((m) => m.chamber === "House");
+      // Congress.gov lists no district number for an at-large member.
+      if (info.houseDistricts <= 1) {
+        return house.length === 1 ? toSittingMember(house[0]) : null;
+      }
+      const district = parseInt(opts.district ?? "", 10);
+      const holder = house.find((m) => m.district === district);
+      return holder ? toSittingMember(holder) : null;
     }
     if (opts.office === "S") {
-      const docs = await MemberScore.find({
-        state: opts.state,
-        chamber: "Senate",
-      })
-        .select("bioguideId name party")
-        .lean();
-      if (docs.length === 1) {
-        const doc = docs[0];
-        return { bioguideId: doc.bioguideId, name: doc.name, party: doc.party };
-      }
-      return null;
+      const senators = delegation.filter((m) => m.chamber === "Senate");
+      return senators.length === 1 ? toSittingMember(senators[0]) : null;
     }
     return null;
   } catch (e) {
