@@ -15,12 +15,20 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // Makes the share-card URLs (app/opengraph-image.tsx) absolute, which
+  // LinkedIn, X, and Slack require.
+  metadataBase: new URL("https://heard-us.vercel.app"),
   title: {
     default: "Heard — See if you're being represented",
     template: "%s · Heard",
   },
   description:
     "Vote on the bills before Congress, compare your votes with your representatives, and prepare for your next election.",
+  // og:title and og:description fall back to each page's title and description.
+  openGraph: {
+    type: "website",
+    siteName: "Heard",
+  },
 };
 
 export const viewport: Viewport = {
