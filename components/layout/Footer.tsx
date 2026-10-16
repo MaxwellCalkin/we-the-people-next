@@ -23,7 +23,9 @@ export default function Footer({ state }: FooterProps) {
   const registerUrl = state ? `https://vote.gov/register/${state.toLowerCase()}/` : "https://vote.gov/";
 
   return (
-    <footer className="mt-auto border-t border-line bg-navy-950/60">
+    // No scroll anchoring here: content loading in above the footer (the
+    // Newest bills list) should push it down, not keep the reader parked on it.
+    <footer className="mt-auto border-t border-line bg-navy-950/60 [overflow-anchor:none]">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr_1.2fr] lg:px-8">
         <div className="max-w-xs">
           <Logo />
