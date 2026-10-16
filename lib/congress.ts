@@ -153,10 +153,147 @@ async function fetchLatestBillsBatch(
   );
 }
 
+const GOVINFO_API = "https://api.govinfo.gov";
+/** Search results requested per GovInfo call. Each printed version of a bill is a separate result. */
+const SEARCH_BATCH = 400;
+/** How long one search's results are reused, so its pages stay consistent. */
+const SEARCH_REVALIDATE_SECONDS = 10 * 60;
+
+/** A bill number once spaces and dots are removed: "H.R. 725" → "hr725". */
+const BILL_NUMBER = /^(hr|s|hjres|sjres|hconres|sconres|hres|sres)(\d+)$/;
+/** GovInfo bill package IDs: BILLS-{congress}{type}{number}{version}, e.g. BILLS-119s4189rs. */
+const BILL_PACKAGE = /^BILLS-(\d+)(hconres|sconres|hjres|sjres|hres|sres|hr|s)(\d+)([a-z]+)$/;
+
+/** What each printed version of a bill marks (GPO bill version codes). */
+const BILL_VERSION_STATUS: Record<string, string> = {
+  ih: "Introduced in the House",
+  is: "Introduced in the Senate",
+  rh: "Reported in the House",
+  rs: "Reported in the Senate",
+  rfh: "Referred to a House committee",
+  rfs: "Referred to a Senate committee",
+  rdh: "Received in the House",
+  rds: "Received in the Senate",
+  pch: "Placed on the House calendar",
+  pcs: "Placed on the Senate calendar",
+  eh: "Passed the House",
+  es: "Passed the Senate",
+  cph: "Passed the House",
+  cps: "Passed the Senate",
+  ath: "Agreed to in the House",
+  ats: "Agreed to in the Senate",
+  eah: "Passed the House with an amendment",
+  eas: "Passed the Senate with an amendment",
+  enr: "Passed both chambers",
+};
+
+interface GovInfoSearchResult {
+  packageId?: string;
+  title?: string;
+  dateIssued?: string;
+}
+
+const searchWords = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^a-z0-9À-ɏ'-]+/g, " ")
+    .split(" ")
+    .map((word) => word.replace(/^[-']+|[-']+$/g, ""))
+    .filter(Boolean);
+
 /**
- * Search bills. Uses GovTrack API for text search (Congress.gov API doesn't
- * support it) and Congress.gov API for listing latest bills, newest action
- * first. `offset` is the 0-based index to start from (for pagination).
+ * The search as GovInfo query terms: words (all must match) and "quoted
+ * phrases". Other punctuation is dropped, since GovInfo rejects stray quotes,
+ * colons, or brackets, and lowercase keeps AND, OR, and NOT plain words.
+ */
+function govInfoTerms(query: string): string {
+  const terms: string[] = [];
+  const rest = query.replace(/"([^"]*)"/g, (_, phrase: string) => {
+    const words = searchWords(phrase);
+    if (words.length > 0) terms.push(`"${words.join(" ")}"`);
+    return " ";
+  });
+  terms.push(...searchWords(rest));
+  return terms.join(" ");
+}
+
+/**
+ * Full-text search of a Congress's bills on GovInfo, which takes the same
+ * api.data.gov key as Congress.gov. GovInfo returns each printed version of a
+ * bill separately; they're merged into one result per bill, in GovInfo's
+ * relevance order, with the newest version as the bill's latest action.
+ */
+async function searchBillText(query: string, congress: number): Promise<BillResult[]> {
+  const terms = govInfoTerms(query);
+  if (!terms) return [];
+
+  const resp = await fetch(`${GOVINFO_API}/search?api_key=${process.env.CONGRESS_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      query: `collection:BILLS AND congress:${congress} AND (${terms})`,
+      pageSize: SEARCH_BATCH,
+      offsetMark: "*",
+      sorts: [{ field: "score", sortOrder: "DESC" }],
+    }),
+    next: { revalidate: SEARCH_REVALIDATE_SECONDS },
+  });
+  if (!resp.ok) {
+    throw new Error(`GovInfo search returned ${resp.status}`);
+  }
+  const data: { results?: GovInfoSearchResult[] } = await resp.json();
+
+  const bills = new Map<string, BillResult>();
+  for (const result of data.results ?? []) {
+    const match = BILL_PACKAGE.exec(result.packageId ?? "");
+    if (!match) continue;
+    const [, billCongress, type, number, version] = match;
+    const id = `${type}${number}-${billCongress}`;
+    const date = result.dateIssued ?? "";
+    const status = BILL_VERSION_STATUS[version] ?? "New version of the bill printed";
+
+    const known = bills.get(id);
+    if (known) {
+      // Keep the bill's place from its best match; report its newest version.
+      if (date > known.latest_major_action_date) {
+        known.latest_major_action = status;
+        known.latest_major_action_date = date;
+      }
+      continue;
+    }
+    // GovInfo lists a bill's titles separated by "; ", short title first.
+    const title = (result.title ?? "").split("; ")[0];
+    bills.set(id, {
+      short_title: title,
+      title,
+      bill_id: id,
+      bill_slug: `${type}${number}`,
+      bill_type: type,
+      congress: billCongress,
+      latest_major_action: status,
+      latest_major_action_date: date,
+    });
+  }
+
+  // GovInfo ranks on full text, which can bury the bill named for the search
+  // ("epstein files" vs. the Epstein Files Transparency Act). Put bills whose
+  // titles contain more of the search words first; the sort is stable, so
+  // GovInfo's order breaks ties.
+  const wanted = [...new Set(searchWords(query))];
+  const titleHits = new Map(
+    [...bills.values()].map((bill) => {
+      const titleWords = new Set(searchWords(bill.title));
+      return [bill, wanted.filter((word) => titleWords.has(word)).length];
+    })
+  );
+  return [...bills.values()].sort((a, b) => titleHits.get(b)! - titleHits.get(a)!);
+}
+
+/**
+ * Bills in the current Congress, a page at a time. With no query, the latest
+ * bills, newest action first. A bill number ("H.R. 725") is looked up
+ * directly; any other query is a full-text search, best matches first.
+ * `offset` is the 0-based index to start from (for pagination).
  */
 export async function searchBills(
   query?: string | null,
@@ -165,63 +302,20 @@ export async function searchBills(
   const congress = getCurrentCongress();
 
   if (query) {
-    return searchBillsGovTrack(query, congress, offset);
+    const billNumber = query.toLowerCase().replace(/[\s.]/g, "");
+    if (BILL_NUMBER.test(billNumber)) {
+      if (offset > 0) return [];
+      const bill = await fetchBillDetails(congress, billNumber);
+      return bill ? [bill] : [];
+    }
+    const results = await searchBillText(query, congress);
+    return results.slice(offset, offset + BILLS_PAGE_SIZE);
   }
 
   const batchStart = Math.floor(offset / LATEST_BILLS_BATCH) * LATEST_BILLS_BATCH;
   const batch = await fetchLatestBillsBatch(congress, batchStart);
   const start = offset - batchStart;
   return batch.slice(start, start + BILLS_PAGE_SIZE);
-}
-
-/** GovTrack bill type strings → our slug prefixes */
-const GOVTRACK_TYPE_MAP: Record<string, string> = {
-  house_bill: "hr",
-  senate_bill: "s",
-  house_resolution: "hres",
-  senate_resolution: "sres",
-  house_joint_resolution: "hjres",
-  senate_joint_resolution: "sjres",
-  house_concurrent_resolution: "hconres",
-  senate_concurrent_resolution: "sconres",
-};
-
-async function searchBillsGovTrack(
-  query: string,
-  congress: number,
-  offset: number
-): Promise<BillResult[]> {
-  const url = `https://www.govtrack.us/api/v2/bill?q=${encodeURIComponent(query)}&congress=${congress}&limit=20&offset=${offset}&sort=-current_status_date`;
-  const resp = await fetch(url);
-  const data = await resp.json();
-  const objects = data.objects || [];
-
-  return objects.map(
-    (b: {
-      bill_type?: string;
-      number?: number;
-      congress?: number;
-      title_without_number?: string;
-      title?: string;
-      introduced_date?: string;
-      current_status_date?: string;
-      current_status_description?: string;
-    }): BillResult => {
-      const type = GOVTRACK_TYPE_MAP[b.bill_type || ""] || "hr";
-      const number = String(b.number || "");
-      return {
-        short_title: b.title_without_number || b.title || "",
-        title: b.title_without_number || b.title || "",
-        bill_id: `${type}${number}-${b.congress || congress}`,
-        bill_slug: `${type}${number}`,
-        bill_type: type,
-        congress: (b.congress || congress).toString(),
-        introduced_date: b.introduced_date || "",
-        latest_major_action: b.current_status_description || "",
-        latest_major_action_date: b.current_status_date || "",
-      };
-    }
-  );
 }
 
 interface ApiMemberTerm {

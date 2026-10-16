@@ -38,8 +38,8 @@ export default async function BillSearchPage({ searchParams }: SearchPageProps) 
         title={query ? <>Results for &ldquo;{query}&rdquo;</> : "Search bills"}
         description={
           query && bills && bills.length > 0
-            ? "Bills in the current Congress, most recently active first."
-            : "Search bill titles and topics in the current Congress."
+            ? "Bills in the current Congress, best matches first."
+            : "Search the full text of bills in the current Congress, or look one up by number."
         }
       />
 
