@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/db";
 import { searchBills } from "@/lib/congress";
 
 export async function GET(request: Request) {
   try {
-    await connectDB();
-
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("search");
-    const offset = parseInt(searchParams.get("offset") || "0", 10);
+    const requested = parseInt(searchParams.get("offset") || "0", 10);
+    const offset = Number.isFinite(requested) && requested > 0 ? requested : 0;
 
     const bills = await searchBills(query, offset);
 

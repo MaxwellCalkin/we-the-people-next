@@ -97,10 +97,66 @@ export async function fetchBillDetails(
   };
 }
 
+/** Bills per page of the bill lists. */
+const BILLS_PAGE_SIZE = 20;
+/** Latest bills fetched per Congress.gov request (its maximum is 250), a whole number of pages. */
+const LATEST_BILLS_BATCH = 240;
+/** How long one sorted batch of latest bills is reused, so pages of it stay consistent. */
+const LATEST_BILLS_REVALIDATE_SECONDS = 10 * 60;
+
+interface ApiBillListItem {
+  title?: string;
+  type?: string;
+  number?: string;
+  congress?: number;
+  introducedDate?: string;
+  latestAction?: { text?: string; actionDate?: string };
+}
+
+/**
+ * Congress.gov can only list bills by update time, and many bills share an
+ * update time, so pages requested one by one overlap and come back in no
+ * useful order. Fetch a large batch at once (cached), sort it by latest
+ * action, and serve pages as slices of that one sorted batch.
+ */
+async function fetchLatestBillsBatch(
+  congress: number,
+  batchStart: number
+): Promise<BillResult[]> {
+  const url = `${CONGRESS_API}/bill/${congress}?limit=${LATEST_BILLS_BATCH}&sort=updateDate+desc&offset=${batchStart}&api_key=${process.env.CONGRESS_KEY}&format=json`;
+  const resp = await fetch(url, {
+    next: { revalidate: LATEST_BILLS_REVALIDATE_SECONDS },
+  });
+  if (!resp.ok) {
+    throw new Error(`Congress.gov bill list returned ${resp.status}`);
+  }
+  const data: { bills?: ApiBillListItem[] } = await resp.json();
+
+  const bills = (data.bills || []).map((b): BillResult => {
+    const type = (b.type || "hr").toLowerCase();
+    const number = b.number || "";
+    return {
+      short_title: b.title || "",
+      title: b.title || "",
+      bill_id: `${type}${number}-${b.congress || congress}`,
+      bill_slug: `${type}${number}`,
+      bill_type: type,
+      congress: (b.congress || congress).toString(),
+      introduced_date: b.introducedDate || "",
+      latest_major_action: b.latestAction?.text || "",
+      latest_major_action_date: b.latestAction?.actionDate || "",
+    };
+  });
+  // Newest action first. The sort is stable, so ties keep Congress.gov's order.
+  return bills.sort((a, b) =>
+    b.latest_major_action_date.localeCompare(a.latest_major_action_date)
+  );
+}
+
 /**
  * Search bills. Uses GovTrack API for text search (Congress.gov API doesn't
- * support it) and Congress.gov API for listing latest bills.
- * `offset` is the 0-based index to start from (for pagination).
+ * support it) and Congress.gov API for listing latest bills, newest action
+ * first. `offset` is the 0-based index to start from (for pagination).
  */
 export async function searchBills(
   query?: string | null,
@@ -112,39 +168,10 @@ export async function searchBills(
     return searchBillsGovTrack(query, congress, offset);
   }
 
-  // No query — list latest bills from Congress.gov
-  const url = `${CONGRESS_API}/bill/${congress}?limit=20&sort=updateDate+desc&offset=${offset}&api_key=${process.env.CONGRESS_KEY}&format=json`;
-  const resp = await fetch(url);
-  const data = await resp.json();
-  const bills = data.bills || [];
-
-  return bills.map(
-    (b: {
-      title?: string;
-      type?: string;
-      number?: string;
-      congress?: number;
-      introducedDate?: string;
-      updateDate?: string;
-      latestAction?: { text?: string; actionDate?: string };
-    }): BillResult => {
-      const type = (b.type || "hr").toLowerCase();
-      const number = b.number || "";
-      return {
-        short_title: b.title || "",
-        title: b.title || "",
-        bill_id: `${type}${number}-${b.congress || congress}`,
-        bill_slug: `${type}${number}`,
-        bill_type: type,
-        congress: (b.congress || congress).toString(),
-        introduced_date: b.introducedDate || "",
-        latest_major_action: b.latestAction ? b.latestAction.text || "" : "",
-        latest_major_action_date: b.latestAction
-          ? b.latestAction.actionDate || ""
-          : "",
-      };
-    }
-  );
+  const batchStart = Math.floor(offset / LATEST_BILLS_BATCH) * LATEST_BILLS_BATCH;
+  const batch = await fetchLatestBillsBatch(congress, batchStart);
+  const start = offset - batchStart;
+  return batch.slice(start, start + BILLS_PAGE_SIZE);
 }
 
 /** GovTrack bill type strings → our slug prefixes */
