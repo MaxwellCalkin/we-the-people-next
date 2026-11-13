@@ -57,8 +57,19 @@ function expectPassedThrough(res: Response) {
 }
 
 describe("proxy matcher", () => {
-  const runsOn = (url: string) =>
-    unstable_doesMiddlewareMatch({ config: proxyModule.config, nextConfig, url });
+  // Every name Auth.js can give the session cookie: "__Secure-" is added over
+  // https, and ".0" when the session is too big for one cookie and is split.
+  const SESSION_COOKIE_NAMES = [
+    "authjs.session-token",
+    "__Secure-authjs.session-token",
+    "authjs.session-token.0",
+    "__Secure-authjs.session-token.0",
+  ];
+  const SIGNED_IN = { [SESSION_COOKIE]: "any-value" };
+  const SIGNED_OUT = {};
+
+  const runsOn = (url: string, cookies: Record<string, string> = SIGNED_IN) =>
+    unstable_doesMiddlewareMatch({ config: proxyModule.config, nextConfig, url, cookies });
 
   it.each([
     "/",
@@ -70,8 +81,30 @@ describe("proxy matcher", () => {
     "/profile",
     "/proposals/new",
     "/vote/hr1/119/voted",
-  ])("runs on the page %s", (url) => {
+  ])("runs on the page %s for a signed-in visitor", (url) => {
     expect(runsOn(url)).toBe(true);
+  });
+
+  it.each(SESSION_COOKIE_NAMES)("runs when the session cookie is named %s", (name) => {
+    expect(runsOn("/bills", { [name]: "any-value" })).toBe(true);
+  });
+
+  // The proxy only acts on signed-in users, and every run costs Vercel compute.
+  // Crawlers and uptime checks never sign in, so they must not start it.
+  it.each(["/", "/bills", "/elections/CA/house/12", "/members/A000370/votes"])(
+    "skips %s for signed-out visitors and crawlers",
+    (url) => {
+      expect(runsOn(url, SIGNED_OUT)).toBe(false);
+    },
+  );
+
+  it("skips a signed-out visitor who only has the cookies the login page sets", () => {
+    const loginPageCookies = {
+      "authjs.csrf-token": "any-value",
+      "authjs.callback-url": "any-value",
+    };
+
+    expect(runsOn("/bills", loginPageCookies)).toBe(false);
   });
 
   it.each([

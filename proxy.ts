@@ -34,7 +34,30 @@ export const config = {
   // Exclusions are whole segments, so a page like /signups still runs. The
   // extension test is `\.\w+$`, not `\.[^/]*$`, because the latter backtracks
   // quadratically on long dotted paths and this regex runs on every request.
+  //
+  // The proxy only acts on signed-in users, so it runs only when the request
+  // carries an Auth.js session cookie. Signed-out visitors, crawlers, and
+  // uptime checks skip it, which matters because every run is billed as Vercel
+  // compute and those visitors are most of the traffic. One entry per name the
+  // cookie can have: "__Secure-" is added over https, and ".0" when the session
+  // is split across cookies. Next.js reads this at build time, so each entry
+  // has to spell the path pattern out in full; it can't share a variable.
   matcher: [
-    "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+    {
+      source: "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+      has: [{ type: "cookie", key: "__Secure-authjs.session-token" }],
+    },
+    {
+      source: "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+      has: [{ type: "cookie", key: "__Secure-authjs.session-token.0" }],
+    },
+    {
+      source: "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+      has: [{ type: "cookie", key: "authjs.session-token" }],
+    },
+    {
+      source: "/((?!api(?:/|$)|_next/|login(?:/|$)|signup(?:/|$)|onboarding(?:/|$)|.*\\.\\w+$).*)",
+      has: [{ type: "cookie", key: "authjs.session-token.0" }],
+    },
   ],
 };
